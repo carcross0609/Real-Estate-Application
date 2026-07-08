@@ -1,6 +1,10 @@
 # DealLens — Analysis Frameworks
 
-Version 1.0 · 2026-07-08 · Sections 25–28 of the master outline.
+Version 2.0 · 2026-07-08 · Sections 25–28 of the master outline.
+
+> **v2.0 changelog:** added §25.8 winner's-curse mitigation (PRD §35 R3); cross-strategy
+> calibration requirement in §25.4; list-to-effective rent adjustment in §26.1; automated
+> daily rate ingestion in §26.3.
 These frameworks are the product's intellectual core. They are specified here to be
 implemented in `engine/` and `scoring/` ([02 §9.3](02-TECHNICAL-DESIGN.md)) with golden
 fixtures; every constant below is a **versioned config default**, not a hardcode.
@@ -97,6 +101,12 @@ spread .3, holding-sensitivity .2). **Overall Score** = max of user's enabled st
 scores (a property brilliant for exactly one strategy *is* a great deal), with the winning
 strategy named — never a blurry average.
 
+Taking a max makes cross-strategy comparability a **calibration requirement, not an
+assumption**: strategy scores must be aligned so equal scores ≈ equal risk-adjusted
+annualized return expectation, otherwise the max silently favors whichever strategy's
+curve is most generous. Checked in evals whenever a weight profile changes (equal-score
+cohorts across strategies compared on the §4.3 outcome panel).
+
 ### 25.5 Grades, risk, confidence, recommendation
 
 - **Letter grade** (within market-window score distribution): A+ ≥ 95th pct, A ≥ 90, A− ≥ 85,
@@ -128,6 +138,24 @@ pages ops (a feed change or market shock can silently skew scores). User-tunable
 (FR-034) are bounded ±50% per group and renormalized — users personalize, they can't
 break the math.
 
+### 25.8 Winner's-curse mitigation (ranking under estimation error)
+
+Ranking by point estimates systematically surfaces the properties whose ARV/rent we
+*over*-estimated — selection on estimation error, the classic AVM-ranking failure and the
+single most likely way this product quietly loses users' money (PRD §35 R3). Mitigations,
+all in v1:
+
+1. **Rank conservatively, display honestly.** Ranking and alerting inputs use the
+   conservative quantile of each estimate (ARV/rent at P30, rehab at P70); the property
+   page still shows the full interval and the P50. Two properties with equal midpoints
+   but different interval widths must not rank equally — the wide one ranks lower.
+2. **Confidence already gates alerts** (25.1 #4) — thin-data properties can top a list
+   but cannot page a user.
+3. **Detection, not just prevention:** the §4.3 score→outcome panel is segmented by rank
+   position. If top-decile properties underperform their predicted spread, that *is*
+   winner's curse manifesting — the fix is recalibrating the ranking quantile, not
+   fiddling with factor weights.
+
 ---
 
 ## 26. Financial Calculation Framework
@@ -145,7 +173,10 @@ market-specific tables where noted. Full output block stored per (property × st
 - **As-is value:** same method against unrenovated-condition comps + condition adjustment
   from vision profile.
 - **Market rent (LTR):** rental comps (same filters vs. rental listings) → $/mo point +
-  interval; RentCast as cross-check (divergence > 15% → confidence ↓, flag).
+  interval; RentCast as cross-check (divergence > 15% → confidence ↓, flag). Listed rents
+  are *asking*, not achieved: a market-calibrated list-to-effective adjustment (initially
+  −2 to −4%) is applied, tracked against closed-lease data where feeds provide it, and
+  PRD §4.3 rent accuracy is measured against effective rents.
 - **STR revenue [F]:** ADR × occupancy × (1 − platform fees), seasonal curve, from licensed
   data; LTR fallback with explicit "STR data unavailable."
 
@@ -160,7 +191,10 @@ all_in              = price + closing_buy + rehab + holding_costs(hold months)
 ### 26.3 Financing scenarios (≥ 3 computed per property)
 Standard set: **(a)** conventional 20% down 30-yr; **(b)** investor DSCR loan 25% down;
 **(c)** hard money (flip: 10% down, 2 pts, 11.5%, interest-only, 12-mo) → refi (BRRRR);
-**(d)** cash. Rates from a weekly-updated rate table (admin-managed; live-quote feed [L]).
+**(d)** cash. Rates auto-ingested daily (FRED/OBMMI conventional series + an
+admin-adjustable investor-loan spread table for DSCR/hard-money); live per-user quotes
+[L]. A stale manual rate table is a silent accuracy bug across every analysis — automated
+from Phase 1, with staleness (> 3 business days) paging ops.
 
 ```
 payment M = P · r(1+r)^n / ((1+r)^n − 1)      r = annual/12

@@ -1,6 +1,11 @@
 # DealLens — Phased Development Roadmap
 
-Version 1.0 · 2026-07-08 · Section 30 of the master outline.
+Version 2.0 · 2026-07-08 · Section 30 of the master outline.
+
+> **v2.0 changelog:** Phase-0 licensing gate now explicitly covers AI-photo-processing
+> rights with the fallback scoped in parallel; GTM workstream added to P0/P1 (PRD §34
+> funnel math); E&O + Anthropic DPA in P0 legal; Analyze-Any-Address/bulk screening in
+> P3; SOC 2 readiness in P4.
 
 Durations assume two builders (Carson + Claude-assisted development) working near
 full-time, and are calendar estimates, not commitments. **Each phase has binding exit
@@ -22,11 +27,12 @@ before writing product code.
 
 | Workstream | Deliverables |
 |---|---|
-| Data licensing | Applications/agreements with MLS Grid/Trestle/Bridge for 2–3 candidate launch metros (choose metros partly by licensing ease + investor activity); ATTOM + RentCast trials signed; per-source license-policy matrix documented (display rules, photo caching, sold-price rules). |
+| Data licensing | Applications/agreements with MLS Grid/Trestle/Bridge for 2–3 candidate launch metros (choose metros partly by licensing ease + investor activity); ATTOM + RentCast trials signed; per-source license-policy matrix documented (display rules, photo caching, sold-price rules, **AI-processing clause** — a feed we can ingest but not run vision on does not satisfy this gate, PRD §31 A4). Fallback path scoped **in parallel, not after failure**: broker-partnership/vendor-sponsorship route + public-records-led interim product (PRD §31 A1). |
 | Vision de-risking | Build the photo eval set (≥500 labeled photos); benchmark Haiku vs. Sonnet on the 27.2 rubric; measure agreement + cost per property; go/no-go vs. PRD §4.3 targets. |
 | Engine spike | Implement 26.5–26.7 core formulas + golden fixtures reviewed against hand underwriting of 20 real properties. |
 | Skeleton | Monorepo scaffold (02 §19), CI, docker-compose dev env, Terraform staging env, ADR process started. |
-| Legal | Entity, ToS/privacy drafts, estimate-disclaimer language, fair-housing review checklist (28.5). |
+| Legal | Entity, ToS/privacy drafts, estimate-disclaimer language ("not an appraisal / not investment advice"), fair-housing review checklist (28.5), **E&O insurance quotes, Anthropic DPA executed** (PRD §35 R8, §31 A4). |
+| GTM groundwork | Waitlist/teaser page per candidate metro + sample-report asset; alpha-recruit pipeline started (PRD §34 — GA needs ~14 trials/day; that demand is built from Phase 0, not at launch). |
 
 **Exit criteria:** ≥1 MLS feed agreement signed (sandbox flowing) · vision benchmark meets
 80%-within-one-grade on eval set at ≤ $0.10/property · engine fixtures match human
@@ -90,7 +96,8 @@ Scope: **Stripe billing, tiers, entitlements** (FR-051, UF-7) · strategy engine
 (with regulation flags; licensed STR data if Phase-0 economics allowed, else LTR-fallback
 mode), house-hack, wholesale, multifamily 2–4 (26.8) · off-market signal pack v1 (absentee,
 long-hold, price-cut velocity) · alert upgrades: push/SMS, instant tier, dedupe/rate caps
-(FR-043) · offer solver (FR-016) · "Ask the Analyst" chat (FR-026) · user-tunable weights
+(FR-043) · offer solver (FR-016) · **Analyze Any Address + bulk screening (FR-017/018,
+metered per PRD §33)** · "Ask the Analyst" chat (FR-026) · user-tunable weights
 (FR-034) · feedback capture (FR-027, UF-9) · pipeline board (S20) · markets #3–5.
 
 Beta pricing hypothesis to test: Basic $39 (1 market, daily digest) · Pro $99 (5 markets,
@@ -109,7 +116,8 @@ Goal: production-grade for the public: reliability, security, teams, self-serve 
 Scope: teams/workspaces + roles + locked assumptions (FR-052, UF-8) · white-label share
 (FR-062) · Excel/CSV export · 99.9% availability work (blue-green matured, load tests to
 5k concurrent, read replica if triggered) · pen test + remediation (NFR-06) · CCPA
-data-access/deletion self-serve (FR-053) · billing maturity (dunning, proration edge
+data-access/deletion self-serve (FR-053) · SOC 2 readiness assessment (controls mapping;
+Type II program runs in P5) · billing maturity (dunning, proration edge
 cases) · onboarding conversion optimization (UF-1 funnel instrumented to §4.2 targets) ·
 marketing site + sample-report SEO (S01–S03) · markets #6–10 · docs/status page.
 

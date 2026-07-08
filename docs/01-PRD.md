@@ -1,6 +1,12 @@
 # DealLens — Product Requirements Document (PRD)
 
-Version 1.0 · 2026-07-08 · Owners: Carson Crossno (co-founder), Claude (co-founder/architect)
+Version 2.0 · 2026-07-08 · Owners: Carson Crossno (co-founder), Claude (co-founder/architect)
+
+> **v2.0 changelog (principal-architect review pass):** added §31 Assumptions &
+> Constraints, §32 Competitive Landscape, §33 Pricing & Packaging, §34 Go-to-Market,
+> §35 Risk Register; new features/FRs (Analyze Any Address, bulk screening); alert-
+> precision counter-metric; NFR-16 (data lifecycle); rent ground-truth fix. Companion
+> docs updated in lockstep (see each header).
 
 Companion documents: [02-TECHNICAL-DESIGN.md](02-TECHNICAL-DESIGN.md) ·
 [03-ANALYSIS-FRAMEWORKS.md](03-ANALYSIS-FRAMEWORKS.md) · [04-ROADMAP.md](04-ROADMAP.md)
@@ -35,6 +41,9 @@ metros within two quarters of MVP, expanding market-by-market.
 
 **What this is not:** a brokerage, a lender, a licensed advisory service, or a consumer
 home-search portal. It is professional decision-support tooling for investors.
+
+The assumptions this plan depends on are registered in §31; the risks that could kill it
+in §35. Both are reviewed monthly (04 rule 5).
 
 ---
 
@@ -82,6 +91,7 @@ investors' time — combines coverage, accuracy, and engagement in one number.
 | Weekly active / monthly active | Stickiness | ≥ 40% | ≥ 55% |
 | D30 retention (paid) | Paying users active at day 30 | ≥ 60% | ≥ 75% |
 | Alert open rate | High-score alerts opened within 24h | ≥ 35% | ≥ 45% |
+| Alert precision (counter-metric) | % of instant alerts acted on within 48h (report viewed, watched, or pipelined) — guards against alert fatigue (§35 R10); an alert volume increase that drops this number is a regression, not growth | ≥ 25% | ≥ 40% |
 | Reports generated / WAU / week | Depth of analysis usage | ≥ 3 | ≥ 6 |
 | NPS | Quarterly in-app survey | ≥ 30 | ≥ 50 |
 
@@ -90,7 +100,7 @@ investors' time — combines coverage, accuracy, and engagement in one number.
 | Metric | Definition | Target |
 |---|---|---|
 | ARV accuracy | Median absolute % error of ARV estimate vs. eventual resale price (for properties that later sell renovated) | ≤ 10% MVP → ≤ 7% |
-| Rent accuracy | Median abs % error vs. observed market rents (listed rentals as ground truth) | ≤ 8% |
+| Rent accuracy | Median abs % error vs. *effective* market rents. Listed rents are asking, not achieved — a list-to-effective adjustment is applied and calibrated against closed-lease data where feeds provide it (03 §26.1) | ≤ 8% |
 | Rehab estimate calibration | % of AI rehab estimates within user-reported actuals ±25% (feedback loop) | ≥ 60% → ≥ 75% |
 | Photo condition agreement | AI condition grades vs. human expert labels on audit sample (quarterly, n ≥ 200) | ≥ 80% within one grade step |
 | Score → outcome correlation | Do 80+ scored properties sell faster / at better spreads than 50-scored ones? (Spearman ρ on outcome panel) | ρ ≥ 0.4 and improving |
@@ -188,6 +198,7 @@ Grouped by module. **[M]** = MVP (Phases 1–2), **[F]** = fast-follow (Phases 3
 - [M] Full filtering: price, beds/baths, sqft, lot, year, property type, DOM, score ranges, strategy scores, status
 - [M] Buy box: saved named filter+strategy+assumption sets that drive alerts
 - [F] Off-market signals: absentee owner, long-hold, tax delinquency, pre-foreclosure (public-records driven)
+- [F] Bulk screening: CSV/address-list import → batch analysis with ranked results and export (P5 volume workflow; Team tier)
 - [F] Sold/leased comp browser as a first-class research surface
 - [L] Nationwide market screener ("which metro fits my strategy") — see §29
 
@@ -199,6 +210,7 @@ Grouped by module. **[M]** = MVP (Phases 1–2), **[F]** = fast-follow (Phases 3
 - [M] Strategy switcher: same property re-underwritten instantly as flip / BRRRR / LTR / house-hack
 - [F] STR underwriting (ADR/occupancy), multifamily (unit-mix, T12-style modeling), land, commercial (NOI/cap-driven), wholesale (spread/assignment)
 - [F] Offer price solver: "what purchase price hits my target CoC / flip margin?"
+- [F] **Analyze Any Address**: on-demand underwriting of any US address, on- or off-market — public records + valuation model + last-listing data where licensed; explicitly lower confidence with an "off-market — no interior data" state. (The investor who drives past a house must be able to punch in the address; competitors have this and it's a top-of-funnel hook.)
 - [L] Sensitivity analysis (tornado charts), Monte Carlo ranges on key outputs
 
 ### 6.3 AI Analysis
@@ -270,6 +282,8 @@ Acceptance criteria live in tickets; requirements here define scope and behavior
 - **FR-014 (Engine) [1]** Editing assumptions recomputes all outputs and scores in ≤ 1 s (client-visible), without mutating the canonical system-assumption analysis.
 - **FR-015 (Comps) [1]** Comp selection is inspectable: distance, recency, similarity score, and adjustment line items shown per comp; user pin/exclude triggers re-estimate (marked "user-adjusted").
 - **FR-016 (Engine) [3]** Offer solver: given a target metric (CoC, flip margin, DSCR), system solves for maximum purchase price and displays it as "Max Allowable Offer."
+- **FR-017 (Engine) [3]** Analyze Any Address: user submits an arbitrary US address; system resolves it via public records, runs the full engine with a records-derived condition prior (no photos ⇒ widened intervals and an explicit "off-market — no interior data" confidence state); usage metered per tier (§33).
+- **FR-018 (Engine) [3]** Bulk screening: CSV of addresses (Team tier) → batch FR-017 analysis producing a ranked, exportable results table; size and rate limits per tier; per-row failure reporting (unresolvable address ≠ silent drop).
 
 ### AI Pipeline
 - **FR-020 (AI) [1]** Every listing photo is classified (room/scene type) and condition-graded per the rubric in 03 §27, producing structured JSON with per-field confidence; failures degrade gracefully (property remains scored with "photo analysis unavailable" flag and widened confidence intervals).
@@ -321,7 +335,7 @@ Acceptance criteria live in tickets; requirements here define scope and behavior
 | NFR-03 | Scalability | No architectural rewrite required to reach: 50 markets, 1M active + 10M historical properties, 100M+ listing events, 5k concurrent users, 500k photos/day through AI pipeline. Scale-out path documented per component (02 §9/§18). |
 | NFR-04 | Availability | 99.5% MVP → 99.9% (Phase 4) for user-facing surfaces. Ingestion may degrade independently; user surfaces serve last-known-good data with staleness indicators. |
 | NFR-05 | Durability | RPO ≤ 15 min, RTO ≤ 4 h. Point-in-time DB recovery; raw ingestion payloads retained (replayable pipeline). |
-| NFR-06 | Security | Per 02 §15: TLS everywhere, encryption at rest, least-privilege IAM, secrets in manager (never in code), OWASP ASVS L2 alignment, dependency and container scanning in CI, pen test before Phase-4 GA. |
+| NFR-06 | Security | Per 02 §15: TLS everywhere, encryption at rest, least-privilege IAM, secrets in manager (never in code), OWASP ASVS L2 alignment, dependency and container scanning in CI, pen test before Phase-4 GA; SOC 2 Type II program from Phase 5 (fund/team-tier procurement will require it). |
 | NFR-07 | Privacy & compliance | CCPA-ready (access/deletion); minimal PII collected; MLS/provider display and retention rules encoded as per-market policy config enforced at API layer; Fair-Housing review: no protected-class proxies exposed as user-facing decision factors (see 03 §28.5). |
 | NFR-08 | Auditability | Every score/estimate reproducible: input snapshot + engine/model/prompt versions stored. User-visible "as of" timestamps on all analyses. |
 | NFR-09 | Cost | COGS per §4.4/§4.5 budgets; AI spend capped per property and per day with automatic degradation ladder (02 §13.6); per-market data cost tracked against revenue. |
@@ -331,6 +345,7 @@ Acceptance criteria live in tickets; requirements here define scope and behavior
 | NFR-13 | Accessibility | WCAG 2.1 AA on all user surfaces; full keyboard navigation of dashboard/table views; color-independent score encoding (grade text + icon, not color alone). |
 | NFR-14 | Browser/device | Latest 2 versions Chrome/Safari/Edge/Firefox; responsive down to 375 px (analysis surfaces optimized for ≥ 768 px; phone experience prioritizes alerts, top deals, report viewing). |
 | NFR-15 | Internationalization | US-only launch; all copy externalized and currency/units centralized so i18n is not a rewrite. |
+| NFR-16 | Data lifecycle | Per-source retention and termination obligations encoded in `license_policy` config; on feed termination, the market-offboarding runbook (02 §14.5) purges/retains data exactly per contract within the contractual window, with audit evidence. Offboarding rehearsed in staging before the first market launch. |
 
 ---
 
@@ -525,6 +540,126 @@ Sequenced options, not commitments; each with the strategic reason it's later.
     (on-site photo → instant rehab check) which is a genuinely new capability, not a port.
 12. **Agent/brokerage white-label** — DealLens engine inside brokerage tools; enterprise
     ARR channel.
+
+---
+
+## 31. Assumptions & Constraints Register
+
+*(Added v2.0 — the master outline extends 31–35.)* Binding assumptions the whole design
+depends on. Each has a validation checkpoint and a fallback; TDD citations (02 §13.3,
+§14.1) reference these IDs.
+
+| ID | Assumption | Validation | Fallback if false |
+|---|---|---|---|
+| A1 | **Licensed data only.** MLS agreements are obtainable for target metros for an analytics (non-IDX) use case; no scraping, ever. | Phase-0 licensing workstream (04); metro selection weighted by licensing ease. | Broker-partnership / vendor-sponsorship route; different metros; public-records-led interim product. Kill trigger per 04 P0. |
+| A2 | **LLMs never compute — they perceive and narrate.** All financial math is deterministic, versioned code; vision output is structured perception with confidence. | Grounding validator (02 §13.3); engine property tests. | None — architectural invariant, not a bet. |
+| A3 | Claude-class vision meets §4.3 photo-agreement targets at ≤ $0.10/property. | Phase-0 benchmark on the 500-photo labeled set (go/no-go gate). | Alternative vision models; reduced photo scope; records-derived condition prior with wider intervals. |
+| A4 | **AI processing of listing photos is contractually permitted** — each MLS license allows transmitting photos to the Anthropic API for transient inference, and Anthropic terms (no-training, DPA) satisfy the MLS's derivative-use clauses. *This is a distinct question from "can we display the photos" and must be verified per source in writing.* | Counsel-reviewed AI-use clause checklist per source, completed before any photo enters the pipeline (S43 onboarding gate); Anthropic DPA executed Phase 0. | Transient-only processing without caching; exclude non-permitting markets; self-hosted vision model [L]. |
+| A5 | A two-person (Claude-assisted) team can ship the P1 scope in 10–12 weeks. | M1.x milestone tracking; scope-shed order pre-agreed in 04. | Cut breadth (S15-lite, secondary screens) — never accuracy gates or the tenant-isolation suite. |
+| A6 | Public-records coverage (ATTOM-class) is sufficient for enrichment in launch metros. | Phase-0 trial-data audit: APN match rate ≥ 90% in candidate metros. | County-direct adapters; serve with degraded confidence flags. |
+| A7 | Investors pay $39–$99/mo for ranked, explainable deal flow. | Phase-1 pricing interviews (≥ 10 would-pay); Phase-3 trial→paid ≥ 8%. | Reprice/repackage (§33); shift wedge toward P5/P6 (deal-flow-as-product personas). |
+
+**Constraints:** US-only launch (NFR-15); no brokerage/lending/advisory activity (§1);
+all outputs are decision support — never appraisals or investment advice (disclaimers per
+§35 R8); solo-team operational simplicity dominates architecture choices (02 §9.1).
+
+---
+
+## 32. Competitive Landscape
+
+| Competitor | What it is | Where DealLens wins | Threat |
+|---|---|---|---|
+| **Privy** | Investor-oriented MLS search with deal heuristics | Real underwriting + photo-derived rehab + explainable scores vs. comp-ratio heuristics | **High — closest analog; watch closely** |
+| Zillow (investor filters) | Consumer portal; unmatched traffic and data | Strategy-native profit ranking and rehab/ARV depth conflict with Zillow's consumer/broker model; terminal UX for professionals | High *if* they enter; structurally unlikely to go deep |
+| PropStream / BatchLeads | Off-market lead-gen + public-records lists | Underwriting depth and explainability vs. raw list-building | Medium — owns P5 wholesaler mindshare |
+| DealCheck / Zilculator | Manual per-property calculators | We analyze the whole market continuously; they analyze one address you already found | Low — feature, not platform |
+| Mashvisor / AirDNA | Market analytics; STR revenue data | Property-level underwriting + the speed loop; AirDNA is a data *vendor* to us [F] | Low / partner |
+| Roofstock-class marketplaces | Curated transaction inventory | Decision support across the entire MLS, not a curated shelf | Low |
+| **Spreadsheet + VA + gut** | The real incumbent | 15-minute alerts, consistency, photo analysis at scale | The actual bar to clear |
+
+**Moat thesis, in order:** (1) the accuracy flywheel — user-corrected rehab/ARV/rent
+actuals (FR-027, UF-9) are proprietary calibration data no competitor gets; (2) per-market
+calibrated cost tables and score curves — operational grind competitors under-invest in;
+(3) trust via explainability — investors defend deals to lenders with our ledger, making
+switching psychological, not just practical; (4) breadth of licensed data relationships.
+**Not moats:** UI polish, prompt engineering, model choice — all replicable in a quarter.
+
+---
+
+## 33. Pricing & Packaging (v1 hypothesis — validated in Phase 3)
+
+| | **Basic $39/mo** | **Pro $99/mo** | **Team $299/mo** |
+|---|---|---|---|
+| Markets | 1 | 5 | 25 |
+| Alert latency | Daily digest | Instant (≤ 15 min) | Instant |
+| Alert channels | Email | Email + push + SMS | All |
+| Seats | 1 | 1 | 5 (+$39/seat) |
+| Reports | Web + 10 PDF/mo | Unlimited PDF + share links | + white-label |
+| Analyze Any Address [F] | 10/mo | 100/mo | 500/mo |
+| Bulk screening [F] | — | — | ✓ |
+| Excel/CSV export | — | ✓ | ✓ |
+| Pipeline board | — | ✓ | ✓ shared + locked assumptions |
+| Annual billing | −20% | −20% | −20% |
+
+Rules:
+- 14-day trial, card up front (quality filter; test a card-free variant if activation
+  misses §4.2 targets).
+- **Price on value metrics — markets, speed, seats, volume — never on analysis quality.**
+  Every tier gets full-fidelity underwriting; a "worse-math cheap tier" poisons the trust
+  brand that is the product.
+- Entitlements enforced server-side (FR-051); usage caps above are derived from the COGS
+  model (02 §18.1) so Basic clears ≥ 60% gross margin at P95 usage.
+- Grandfathering policy decided before first price change, not during it.
+
+---
+
+## 34. Go-to-Market Plan
+
+The funnel math behind §4.5, stated plainly: 100 subscribers at 8% trial→paid requires
+~1,250 trials in 90 days ≈ **14 trials/day by GA** — demand that must be built during
+alpha/beta, not switched on afterward. Sequenced with the roadmap:
+
+1. **Alpha (P1):** 20–50 hand-recruited investors from launch-metro REIA meetups and
+   BiggerPockets outreach. Goal: testimonials + §4.3 accuracy proof points, not revenue.
+2. **Waitlist engine (from P1):** public sample report (S03) + a "your market's Top 25"
+   teaser page per candidate metro; waitlist volume becomes the market-expansion
+   prioritization signal (which metro next is a data question, not a guess).
+3. **Content wedge (P2–P3):** publish accuracy stats and market-level underwriting data
+   ("we underwrote all 1,204 Austin actives — here's the distribution"); partnerships
+   with investor educators (P1 pipeline; affiliate 20% year-1).
+4. **Community & lender loop (P3):** REIA sponsorships in live metros; hard-money-lender
+   co-marketing — every shared report (UF-5) is a product demo delivered to exactly the
+   right audience; the share link is the viral loop.
+5. **Paid acquisition (P4+):** only after organic CAC/payback baselines exist; intent
+   terms ("BRRRR calculator," "ARV estimator") land on a free single-use analyzer teaser.
+6. **Compliance guardrail:** public/SEO surfaces use aggregate stats and anonymized sample
+   reports only — never raw listing dumps (NFR-07; MLS display rules apply to marketing
+   pages too).
+
+Ownership: Carson (community/content). Engineering time budgeted to GTM assets ≤ 10% per
+phase — the product is the growth engine; GTM assets mostly reuse product surfaces.
+
+---
+
+## 35. Risk Register
+
+Scored likelihood × impact (1–5 each); reviewed monthly (04 rule 5). Top block is
+existential; bottom block is operational.
+
+| # | Risk | L×I | Mitigation / trigger |
+|---|---|---|---|
+| R1 | **MLS licensing blocked, or AI photo processing prohibited**, in target metros | 4×5 | Phase-0 gate + kill trigger (04 P0); metro choice weighted by licensing ease; broker-partnership fallback scoped *in parallel*, not after failure (A1/A4); counsel-reviewed AI-use clause per source. |
+| R2 | **Feed revocation post-launch** (MLS policy change, aggregator loss) | 2×5 | Termination runbook + purge obligations (02 §14.5, NFR-16); ≥ 2 feed relationships per metro where economics allow; contractual notice periods negotiated up front. |
+| R3 | **Winner's curse in rankings** — top-ranked deals systematically over-estimated (selection on estimation error) | 4×4 | Conservative-quantile ranking (03 §25.8); confidence-gated alerts; §4.3 score→outcome panel segmented by rank position from day one. |
+| R4 | Vision accuracy below bar → rehab estimates wrong → trust collapse | 3×5 | Phase-0 go/no-go benchmark (A3); §4.3 metrics as release gates; ranges not points; inspection-contingent labeling (03 §27.4). |
+| R5 | Privy/Zillow/CoStar ships explainable investor scoring | 2×4 | Speed to the accuracy flywheel (§32 moats); publish accuracy stats as public proof; strategy-engine depth incumbents won't prioritize. |
+| R6 | Unit economics: AI + data COGS eats Basic-tier margin | 3×3 | COGS model (02 §18.1) reviewed monthly from first alpha week (04 rule 4); degradation ladder (02 §13.6); §33 usage caps. |
+| R7 | Two-person team burnout / bus factor | 3×4 | Pre-agreed scope-shed order (A5); boring-tech stack; runbooks from P1; phase gates permit pausing without half-built systems. |
+| R8 | Legal: outputs construed as appraisal or investment advice; fair-housing claim | 2×5 | "Not an appraisal / not advice" disclaimers (S04) on every report surface and PDF; E&O insurance from Phase 0; fair-housing CI guardrail (03 §28.5); counsel review at GA. |
+| R9 | Rate/market regime shift changes what "a deal" is | 3×3 | Market-relative normalization adapts by construction (03 §25.2); daily rate ingestion (03 §26.3); positioning: DealLens finds the best of *this* market. |
+| R10 | Alert fatigue → churn (too many mediocre "deals") | 3×4 | Alert-precision counter-metric (§4.2); confidence gating (03 §25.1); rate caps + digest folding (FR-043). |
+| R11 | Breach / licensed-data exfiltration (our data *is* the product) | 2×5 | 02 §15 control set; tile-endpoint hardening (02 §12.2); bulk-read anomaly detection; incident-response runbook from P1. |
+| R12 | Email deliverability failure silently kills the alert loop | 2×4 | Dedicated sending subdomain, SPF/DKIM/DMARC from day 1, warm-up plan, seed-list + bounce monitoring paged like an SLO (02 §10). |
 
 ---
 

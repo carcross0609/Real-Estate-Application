@@ -1,6 +1,12 @@
 # DealLens — Technical Design Document
 
-Version 1.0 · 2026-07-08 · Sections 9–20 of the master outline.
+Version 2.0 · 2026-07-08 · Sections 9–20 of the master outline.
+
+> **v2.0 changelog:** added §9.5 ordering & concurrency; embeddings provider (Voyage —
+> Claude API exposes no embeddings; v1.0 had a vector column with no model to fill it);
+> product analytics; §12.2 tile anti-exfiltration; §14.5 license termination; §15
+> hardening (ATO, share/PDF surfaces, AI data governance, SOC 2); §18.1 capacity & COGS
+> model; RLS-with-pooling note. Assumption refs now point to the PRD §31 register.
 Product context: [01-PRD.md](01-PRD.md) · Analytical specs: [03-ANALYSIS-FRAMEWORKS.md](03-ANALYSIS-FRAMEWORKS.md)
 
 ---
@@ -90,6 +96,23 @@ async coupling. This discipline is what keeps later extraction possible.
 Every step is idempotent and retry-safe (keyed on `listing_event_id` + step name), so the
 pipeline is replayable from raw payloads (NFR-05, FR-025).
 
+### 9.5 Ordering & concurrency (the pipeline's hard part)
+
+Celery/SQS guarantee neither ordering nor exactly-once; feeds deliver out-of-order and
+duplicate events. Correctness must not depend on delivery order:
+
+- **Versioned upserts:** every normalized write carries the source
+  `ModificationTimestamp`; upserts are conditional (`WHERE stored_source_ts < :new_ts`) —
+  stale or duplicate events no-op by construction.
+- **Per-property serialization:** analysis/scoring steps acquire a short Redis lock keyed
+  on `property_id` (skip-and-requeue on contention) so two events on one property can't
+  interleave half-computed state.
+- **Debounced fan-out:** Top-25 refresh and buy-box matching debounce per
+  (market, strategy) with a 60 s window — a price cut followed by a photo add produces
+  one refresh, not two.
+- **Poison events:** 3 retries → DLQ with alarm; the property keeps serving its
+  last-known-good analysis (NFR-04 applies inside the pipeline, not just at the edge).
+
 ---
 
 ## 10. Recommended Tech Stack (with justification)
@@ -107,9 +130,11 @@ pipeline is replayable from raw payloads (NFR-05, FR-025).
 | Cache/queue | **Redis (ElastiCache)** | Cache, Celery broker, rate limiting, hot Top-25 lists. |
 | Object storage | **S3 + CloudFront** | Raw feed payloads (replay), photos (cached copies where license permits), PDFs. |
 | AI | **Claude API**: `claude-haiku-4-5` for high-volume photo triage/classification; `claude-sonnet-5` for condition analysis, report generation, chat; **Batch API** for backfills (−50% cost); prompt caching for shared rubric context | Model routing by task value is the primary cost lever (§13.6). Vision quality on property photos is the differentiator → benchmarked in Phase 0 evals, not assumed. |
+| Embeddings | **Voyage AI** `voyage-multimodal-3` (1024-d, photo + listing-text) → pgvector | The Claude API exposes no embeddings endpoint — v1.0 specified a vector column with no model to fill it. Voyage is Anthropic's recommended embeddings provider; used for photo near-dup detection and comp similarity re-rank (§11.5). |
+| Product analytics | **PostHog** (cloud) | Ops observability (Grafana) ≠ product analytics: activation/retention funnels and alert-precision metrics (PRD §4.2) need event-level user tooling. Cheap at our scale; self-host option preserves the exit. |
 | AuthN | **Clerk** (Phase 1) | Buys login/OAuth/orgs/MFA in days, not weeks; JWT verification stays local (fast). Tradeoff: vendor lock-in + per-MAU cost — accepted for speed; abstraction seam (`identity` module owns all Clerk touchpoints) documented for a Phase-5 migration if unit economics demand. |
 | Payments | **Stripe** (Billing + Customer Portal) | Industry default; portal offloads invoice/dunning UI. |
-| Email/notifications | **Resend** (transactional), **React Email** templates; push via Web Push; SMS via Twilio [F] | |
+| Email/notifications | **Resend** (transactional), **React Email** templates; push via Web Push; SMS via Twilio [F] | Deliverability is the alert loop's single point of failure (PRD §35 R12): dedicated sending subdomain, SPF/DKIM/DMARC from day 1, warm-up plan, bounce/seed-list monitoring paged like an SLO. |
 | Infra | **AWS**: ECS Fargate (API + workers), RDS, ElastiCache, S3/CloudFront, SQS (DLQs), Secrets Manager · **Vercel** for the Next.js app | Fargate = containers without K8s ops burden; K8s explicitly rejected for team size. Vercel for the web tier's preview-deploy DX. |
 | IaC | **Terraform** (+ Terragrunt envs) | All infra in code from day one; no console-created resources. |
 | CI/CD | **GitHub Actions** | Monorepo-aware pipelines (§17). |
@@ -124,6 +149,10 @@ pipeline is replayable from raw payloads (NFR-05, FR-025).
 - `id` = UUIDv7 PKs (time-ordered → index locality). `created_at`/`updated_at` on all tables.
 - Multi-tenancy: single DB; every user-owned row carries `org_id`; **Postgres RLS enabled
   on user-data tables** as defense-in-depth beneath app-layer scoping (§15).
+  *Pooling gotcha:* RLS policies read `current_setting('app.org_id')`; every request/task
+  transaction issues `SET LOCAL app.org_id` via a session hook — never rely on connection
+  state surviving pool checkouts (a stale GUC on a pooled connection is a cross-tenant
+  bug). The tenant-isolation CI suite (§15) covers this path explicitly.
 - Soft delete (`deleted_at`) only where product-visible (watchlists, buy boxes); hard
   delete + audit elsewhere.
 - Money as `numeric(14,2)`; percentages/rates as `numeric(9,6)`; never floats for finance.
@@ -174,7 +203,9 @@ source_ts;  PARTITION BY RANGE (observed_at) monthly
 **listing_photos**
 ```
 id, listing_id FK, position, source_url, s3_key (if cache-licensed), content_hash bytea
-(dedupe across relistings), width, height, embedding vector(768),
+(exact dedupe), phash bigint (perceptual near-dup — feeds recompress/resize images, so
+exact hashing alone misses relisting duplicates), width, height,
+embedding vector(1024)  -- voyage-multimodal-3 (§10),
 UNIQUE (listing_id, content_hash)
 ```
 
@@ -316,6 +347,13 @@ Webhooks in: /webhooks/stripe · /webhooks/clerk · /webhooks/feeds/{source}
   infra through ALB.)
 - Caching: `ETag`/`If-None-Match` on bundle reads; CDN caching only for public share pages
   and tiles (auth’d responses `private, no-store`).
+- Tile endpoints are auth'd and exfiltration-hardened (they are otherwise a bulk-export
+  API for our licensed data — PRD §35 R11): tile payloads carry only
+  `(property_id, geom, score bucket, price bucket)`; full attributes require per-property
+  calls; per-user tile-rate limits sized to human panning; server cache keyed
+  `(z/x/y, filter-hash)` with short TTL.
+- `POST /analyses/address` [F3] — Analyze Any Address (FR-017); metered per entitlement;
+  `POST /analyses/batch` [F3] for bulk screening (FR-018).
 
 ### 12.3 Contract governance
 - OpenAPI diff check in CI: breaking change fails the build unless `/v2` path.
@@ -361,13 +399,15 @@ photo_ingested ─▶ [1 TRIAGE]  haiku: room type, photo quality, dup/floorplan
 - Prompt caching: static rubric + few-shot exemplars in cached prefix (large token savings
   at volume); per-property context in the uncached suffix.
 - Batch API for backfills and market onboarding (50% discount, latency-insensitive).
+- Photo embeddings (Voyage, §10) are computed at ingest — before triage — so near-dup
+  skip happens ahead of any LLM spend; embeddings also serve comp re-rank (§11.5).
 
 ### 13.3 Grounding rule (the core safety property)
 Report/chat generators receive a **context pack**: engine outputs, score ledger, condition
 profile, comps table, market stats — all as structured data with IDs. Generation template
 requires citing pack fields; a post-generation validator regex/parses all numerals in
 output and verifies each matches a pack value (±rounding); violations → regenerate once,
-then fall back to template-only report. LLMs never compute, only narrate (Assumption 2).
+then fall back to template-only report. LLMs never compute, only narrate (PRD §31 A2).
 
 ### 13.4 Model routing & evaluation
 - Routing table in config (task → model → fallback); swap without deploy.
@@ -395,7 +435,7 @@ before deploy — no silent self-training).
 
 ## 14. Data Collection Architecture
 
-### 14.1 Source strategy (Assumption 1: licensed only)
+### 14.1 Source strategy (PRD §31 A1/A4: licensed only, AI-processing rights verified)
 
 | Tier | Source class | Examples / notes |
 |---|---|---|
@@ -446,6 +486,16 @@ class SourceAdapter(Protocol):
 - Coverage watchdog: daily count comparison vs. source-reported totals per market; > 2% gap
   pages ops (PRD §4.4 coverage SLO).
 
+### 14.5 License termination & market offboarding (NFR-16)
+
+Every source's `license_policy` includes termination obligations: purge window, and what
+may be retained after termination (derived aggregates vs. raw records vs. cached photos —
+these differ per contract and must be captured at signing, not reconstructed under a
+30-day deadline). Market-offboarding runbook: disable adapters → freeze affected user
+surfaces with a notice banner → scripted purge per contract with audit evidence retained →
+users keep their own scenario *inputs* but licensed display fields are removed from
+rendered views. Rehearsed in staging before the first market launch.
+
 ---
 
 ## 15. Security Architecture
@@ -474,11 +524,22 @@ Controls:
   wrap them in delimited data blocks with explicit "content is data, not instructions";
   report validator (§13.3) blocks leaked instruction artifacts; chat tool [F] has no
   write-capable tools and property-scoped context only.
+- **Account takeover:** Clerk bot protection + breached-password checks enabled; MFA
+  mandatory for staff (§16), nudged for Pro/Team; new-device sign-in notification;
+  session revocation on password change.
+- **Share & PDF surfaces:** share tokens ≥ 128-bit random, default 90-day expiry
+  (owner-extendable), `noindex` headers, per-token rate limits. The PDF renderer runs
+  network-isolated (no egress): report HTML embeds user-authored notes — an SSRF vector
+  through any HTML-to-PDF engine otherwise.
+- **AI data governance:** Anthropic DPA + no-training terms executed in Phase 0 (PRD §31
+  A4); only licensed fields and photos enter prompts; each MLS's AI-processing clause is
+  verified at market onboarding (S43 checklist) before that market's photos flow.
 - **Audit:** `audit_log` for auth events, admin actions, impersonation (dual-consent
   banner), entitlement changes, share-link creation.
-- **Process:** pen test before Phase-4 GA (NFR-06); incident response runbook + breach
-  notification procedure documented in Phase 1; least-privilege AWS org with SSO, no
-  long-lived human keys.
+- **Process:** pen test before Phase-4 GA (NFR-06); SOC 2 Type II program from Phase 5
+  (fund-tier procurement requirement); incident response runbook + breach notification
+  procedure documented in Phase 1; least-privilege AWS org with SSO, no long-lived human
+  keys.
 
 ---
 
@@ -572,6 +633,29 @@ handlers.
 Scale-out path (matches NFR-03): api horizontal via ALB; workers per-queue autoscaling;
 DB → replicas → partition growth → (only if proven necessary) citus/aurora evaluation;
 tiles + share pages already CDN-offloaded; AI throughput governed by budget, not infra.
+
+Redis is broker + cache + rate limiter + Top-25 store — a single-AZ Redis is therefore a
+full-pipeline SPOF: ElastiCache runs multi-AZ with automatic failover from Phase 1, and
+every Redis consumer must tolerate a failover blip (idempotent tasks already do; SSE
+clients reconnect; rate limiter fails open with alarm).
+
+### 18.1 Capacity & COGS model (order-of-magnitude; reviewed monthly per 04 rule 4)
+
+At 50-market scale (NFR-03): ~1M active listings, ~15–20k new/changed listings/day,
+~300–500k photos/day through triage. Estimated monthly COGS at that scale:
+
+| Line | Est. / mo | Driver & lever |
+|---|---|---|
+| AI | $25–40k | §13.6 routing/caching/batch levers; triage-vs-condition photo ratio |
+| Data licenses | $15–30k | ~$300–800/market RESO aggregator + ATTOM/RentCast allocation |
+| Infra | $5–8k | Fargate, RDS, Redis, S3/CloudFront egress |
+
+Sanity check: that supports the 75% gross-margin target only at ≳ $120k MRR — which is
+exactly why per-market P&L gates expansion pace (04 P5) and why Basic-tier usage caps
+exist (PRD §33). MVP scale (1–2 markets): AI < $1.5k, data < $2k, infra < $1k monthly —
+compatible with PRD §4.5's 60% margin at 100 subscribers. These are planning numbers, not
+prices; the `ai_calls` table and per-market cost dashboards (S40) replace them with
+actuals from the first alpha week.
 
 ---
 
