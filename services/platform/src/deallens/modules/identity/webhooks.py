@@ -19,6 +19,7 @@ from svix.webhooks import Webhook, WebhookVerificationError
 from deallens.core.config import get_settings
 from deallens.core.db import system_session
 from deallens.core.errors import ValidationError
+from deallens.modules.billing.service import recompute_entitlements
 from deallens.modules.identity import service
 from deallens.modules.identity.models import (
     Org,
@@ -104,7 +105,7 @@ async def _upsert_org(db: Any, data: dict[str, Any]) -> None:
                 org_id=org.id, plan=SubscriptionPlan.BASIC, status=SubscriptionStatus.TRIALING
             )
         )
-        await service.recompute_entitlements(db, org_id=org.id, plan=SubscriptionPlan.BASIC)
+        await recompute_entitlements(db, org_id=org.id, plan=SubscriptionPlan.BASIC)
     else:
         org.name = data["name"]
         org.slug = data["slug"]

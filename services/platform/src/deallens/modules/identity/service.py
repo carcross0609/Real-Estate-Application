@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from deallens.core.auth import Actor
 from deallens.core.config import get_settings
 from deallens.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationError
+from deallens.modules.billing.service import recompute_entitlements
 from deallens.modules.identity.models import (
     ApiKey,
     AuditLog,
@@ -39,55 +40,11 @@ API_KEY_PREFIX = "dlk"
 
 
 # --- Layer 2: entitlements (plan-based) — §16.2 --------------------------------------
-
-PLAN_ENTITLEMENTS: dict[SubscriptionPlan, dict[str, object]] = {
-    # markets_limit values from FR-001 (Basic: 1 area, Pro: 5, Team: 25). Other fields are
-    # reasonable Phase-1 defaults; `billing` module owns recomputing these from the real
-    # Stripe price/plan on every subscription webhook.
-    SubscriptionPlan.BASIC: dict(
-        markets_limit=1,
-        seats=1,
-        alert_latency="daily",
-        exports_enabled=False,
-        pipeline_enabled=False,
-        api_access=False,
-    ),
-    SubscriptionPlan.PRO: dict(
-        markets_limit=5,
-        seats=1,
-        alert_latency="hourly",
-        exports_enabled=True,
-        pipeline_enabled=False,
-        api_access=False,
-    ),
-    SubscriptionPlan.TEAM: dict(
-        markets_limit=25,
-        seats=8,
-        alert_latency="instant",
-        exports_enabled=True,
-        pipeline_enabled=True,
-        api_access=True,
-    ),
-}
-
-
-async def recompute_entitlements(
-    db: AsyncSession, *, org_id: UUID, plan: SubscriptionPlan
-) -> Entitlement:
-    """Derive `Entitlement` from `plan`. Called on org creation and on every subscription
-    change (trial start, upgrade/downgrade, cancellation → falls back to BASIC limits).
-    """
-    result = await db.execute(select(Entitlement).where(Entitlement.org_id == org_id))
-    entitlement = result.scalar_one_or_none()
-    fields = PLAN_ENTITLEMENTS[plan]
-    if entitlement is None:
-        entitlement = Entitlement(org_id=org_id, **fields)
-        db.add(entitlement)
-    else:
-        for key, value in fields.items():
-            setattr(entitlement, key, value)
-    await db.flush()
-    return entitlement
+#
+# `recompute_entitlements` (plan → Entitlement values) lives in `billing.service` — §9.3
+# assigns "plans, entitlement computation" to `billing`, not `identity`. It's imported
+# above and re-used verbatim here for the org-creation bootstrap path; identity's own job
+# is only to *consume* the computed values via `check_entitlement` below.
 
 
 async def check_entitlement(db: AsyncSession, *, org_id: UUID, key: str) -> None:
