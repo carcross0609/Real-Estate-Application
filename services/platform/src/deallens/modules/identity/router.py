@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from deallens.core.auth import Actor, get_actor_db, get_current_actor
+from deallens.core.auth import Actor, get_actor_db, get_api_actor, get_current_actor
 from deallens.core.clerk_client import ClerkClient, get_clerk_client
 from deallens.core.errors import NotFoundError
 from deallens.modules.identity import schemas, service
@@ -161,12 +161,13 @@ async def accept_invite(
     db: AsyncSession = Depends(get_actor_db),
     clerk: ClerkClient = Depends(get_clerk_client),
 ) -> OrgMember:
-    """No org context required — the invite token itself identifies the org, and any
-    authenticated user may redeem an invite addressed to their email (service.py doesn't
-    currently cross-check the invite's email against `actor.email`; add that check before
-    this ships if invite links might be forwarded).
+    """No org context required — the invite token itself identifies the org. `service.accept_invite`
+    binds the token to its intended recipient by requiring `actor.email` to match the invited
+    address, so a forwarded invite link can't be redeemed by the wrong person.
     """
-    member = await service.accept_invite(db, token=body.token, user_id=actor.user_id)
+    member = await service.accept_invite(
+        db, token=body.token, user_id=actor.user_id, accepting_email=actor.email
+    )
     org = await db.get(Org, member.org_id)
     if org is not None:
         await clerk.create_organization_membership(
@@ -272,4 +273,23 @@ async def revoke_api_key(
     service.authorize(actor, service.Action.API_KEY_REVOKE, resource_org_id=org_id)
     await service.revoke_api_key(
         db, org_id=org_id, api_key_id=key_id, revoked_by_user_id=actor.user_id
+    )
+
+
+# --- Programmatic surface (API-key authenticated, not session) ----------------------------
+#
+# Every endpoint above authenticates a *human* via their Clerk session JWT. The routes below
+# authenticate an *API key* (`Authorization: Bearer dlk_…`) through `get_api_actor` — the
+# machine-facing half of §16.1. This `whoami` is the canonical "is my key live, and what can
+# it do" call every API consumer needs; the real data endpoints it fronts (properties,
+# analyses) arrive with their owning modules.
+
+
+@router.get("/api/whoami", response_model=schemas.ApiIdentityOut, tags=["api"])
+async def api_whoami(actor: Actor = Depends(get_api_actor)) -> schemas.ApiIdentityOut:
+    return schemas.ApiIdentityOut(
+        org_id=actor.require_org(),
+        api_key_id=actor.api_key_id,
+        scopes=sorted(actor.api_key_scopes),
+        auth_method=actor.auth_method,
     )

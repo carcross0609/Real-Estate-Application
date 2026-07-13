@@ -14,7 +14,6 @@ from uuid import UUID
 
 from sqlalchemy import (
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Numeric,
@@ -27,6 +26,7 @@ from sqlalchemy.sql import func
 from deallens.core.db import Base
 from deallens.core.enums import Strategy
 from deallens.core.ids import uuid7
+from deallens.core.sa_types import pg_enum
 from deallens.modules.identity.models import TimestampMixin
 
 
@@ -57,16 +57,16 @@ class Score(TimestampMixin, Base):
     property_id: Mapped[UUID] = mapped_column(ForeignKey("properties.id", ondelete="CASCADE"))
     listing_id: Mapped[UUID | None] = mapped_column(ForeignKey("listings.id", ondelete="SET NULL"))
     market_id: Mapped[UUID | None] = mapped_column(ForeignKey("markets.id", ondelete="SET NULL"))
-    strategy: Mapped[Strategy] = mapped_column(Enum(Strategy, name="strategy"))
+    strategy: Mapped[Strategy] = mapped_column(pg_enum(Strategy, name="strategy"))
     score: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     grade: Mapped[str] = mapped_column(String(2))  # A+ … F within market-window distribution
     risk_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))  # 0–100, higher=riskier
     confidence_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))  # 0–100
     recommendation: Mapped[Recommendation | None] = mapped_column(
-        Enum(Recommendation, name="recommendation")
+        pg_enum(Recommendation, name="recommendation")
     )
     # For `overall`: which strategy won the max (§25.4). NULL for single-strategy scores.
-    winning_strategy: Mapped[Strategy | None] = mapped_column(Enum(Strategy, name="strategy"))
+    winning_strategy: Mapped[Strategy | None] = mapped_column(pg_enum(Strategy, name="strategy"))
     scoring_version: Mapped[str] = mapped_column(String(32))
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True

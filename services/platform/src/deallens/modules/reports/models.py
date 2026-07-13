@@ -16,7 +16,6 @@ from uuid import UUID
 from sqlalchemy import (
     BigInteger,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -29,6 +28,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from deallens.core.db import Base
 from deallens.core.ids import uuid7
+from deallens.core.sa_types import pg_enum
 from deallens.modules.identity.models import TimestampMixin
 
 
@@ -71,7 +71,7 @@ class Report(TimestampMixin, Base):
     )
     kind: Mapped[str] = mapped_column(String(32), default="property")
     status: Mapped[ReportStatus] = mapped_column(
-        Enum(ReportStatus, name="report_status"), default=ReportStatus.PENDING
+        pg_enum(ReportStatus, name="report_status"), default=ReportStatus.PENDING
     )
     context_pack: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)  # §13.3 grounding
     narrative: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)  # section → prose
@@ -150,7 +150,7 @@ class PipelineDeal(TimestampMixin, Base):
     )
     title: Mapped[str | None] = mapped_column(String(255))
     stage: Mapped[DealStage] = mapped_column(
-        Enum(DealStage, name="deal_stage"), default=DealStage.LEAD
+        pg_enum(DealStage, name="deal_stage"), default=DealStage.LEAD
     )
     board_position: Mapped[int] = mapped_column(Integer, default=0)
     target_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))

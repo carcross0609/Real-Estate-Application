@@ -16,7 +16,6 @@ from geoalchemy2 import Geometry, WKBElement
 from sqlalchemy import (
     Boolean,
     Date,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -30,6 +29,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from deallens.core.db import Base
 from deallens.core.ids import uuid7
+from deallens.core.sa_types import pg_enum
 from deallens.modules.identity.models import TimestampMixin
 from deallens.modules.markets.models import GeoLevel
 
@@ -115,8 +115,8 @@ class GeoLayer(TimestampMixin, Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid7)
     market_id: Mapped[UUID | None] = mapped_column(ForeignKey("markets.id", ondelete="CASCADE"))
-    kind: Mapped[GeoLayerKind] = mapped_column(Enum(GeoLayerKind, name="geo_layer_kind"))
-    geo_level: Mapped[GeoLevel | None] = mapped_column(Enum(GeoLevel, name="geo_level"))
+    kind: Mapped[GeoLayerKind] = mapped_column(pg_enum(GeoLayerKind, name="geo_layer_kind"))
+    geo_level: Mapped[GeoLevel | None] = mapped_column(pg_enum(GeoLevel, name="geo_level"))
     geo_id: Mapped[str | None] = mapped_column(String(32))
     geom: Mapped[WKBElement | None] = mapped_column(
         Geometry("GEOMETRY", srid=4326, spatial_index=False)

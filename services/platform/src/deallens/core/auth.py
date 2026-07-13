@@ -13,8 +13,8 @@ than waiting for the browser to refresh its Clerk session token.
 """
 
 import time
-from collections.abc import AsyncGenerator
-from dataclasses import dataclass
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
@@ -27,7 +27,7 @@ from sqlalchemy import select
 from deallens.core.config import get_settings
 from deallens.core.db import request_scoped_session, system_session
 from deallens.core.errors import ForbiddenError, UnauthenticatedError
-from deallens.modules.identity.models import OrgMember, User
+from deallens.modules.identity.models import API_KEY_PREFIX, OrgMember, User
 
 settings = get_settings()
 
@@ -86,7 +86,15 @@ async def verify_session_token(token: str) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class Actor:
-    """The authenticated caller, with org context resolved from our own shadow tables."""
+    """The authenticated caller, with org context resolved from our own shadow tables.
+
+    Two authentication methods terminate here (§16.1): a human's Clerk **session** JWT
+    (`auth_method="session"`, carries `org_role`, authorizes via RBAC/`authorize()`), and a
+    programmatic **API key** (`auth_method="api_key"`, carries `api_key_scopes`, authorizes
+    via `require_scopes()`). An API-key actor has `org_role=None` on purpose — keys cannot
+    drive role-gated management endpoints (create org, change roles, billing); those are
+    human-only. `user_id` for a key is its creator, so audit trails still name a person.
+    """
 
     user_id: UUID
     clerk_user_id: str
@@ -94,6 +102,9 @@ class Actor:
     org_id: UUID | None
     org_role: str | None
     is_staff: bool = False
+    auth_method: str = "session"
+    api_key_scopes: frozenset[str] = field(default_factory=frozenset)
+    api_key_id: UUID | None = None
 
     def require_org(self) -> UUID:
         if self.org_id is None:
@@ -160,6 +171,78 @@ async def get_actor_db(actor: Actor = Depends(get_current_actor)) -> AsyncGenera
     """The standard per-request DB dependency for module routers: a `request_scoped_session`
     pre-populated with the resolved actor's `user_id`/`org_id` GUCs. Pair with
     `Depends(get_current_actor)` for the actor itself when a handler needs both.
+    """
+    async with request_scoped_session(user_id=actor.user_id, org_id=actor.org_id) as db:
+        yield db
+
+
+# --- Programmatic (API-key) authentication — §15 "API keys scoped + metered" -------------
+
+
+async def get_api_actor(token: str = Depends(get_bearer_token)) -> Actor:
+    """Resolve an `Actor` from an API key presented as `Authorization: Bearer dlk_…`.
+
+    The key-hash lookup runs on `system_session()` (RLS bypass) for the same reason the
+    session path does: `api_keys` is org-scoped by RLS, but we don't yet know the org — the
+    key's own validity is the trust boundary for this one read. `authenticate_api_key`
+    returns `None` for unknown, revoked, or expired keys (all indistinguishable to the
+    caller, by design) and stamps `last_used_at` on success.
+
+    The resulting actor has `org_role=None`: keys authorize via scopes, never RBAC. Gate the
+    endpoint with `require_scopes(...)` to assert the specific capability.
+    """
+    if not token.startswith(f"{API_KEY_PREFIX}_"):
+        # Not an API key (likely a session JWT hitting an API-key-only endpoint). Fail as
+        # 401 without a DB round-trip.
+        raise UnauthenticatedError("Endpoint requires an API key")
+
+    # Lazy import breaks the core.auth ↔ identity.service cycle (service imports `Actor`).
+    from deallens.modules.identity.service import authenticate_api_key
+
+    async with system_session() as sys_db:
+        api_key = await authenticate_api_key(sys_db, plaintext=token)
+    if api_key is None:
+        raise UnauthenticatedError("Invalid, revoked, or expired API key")
+
+    return Actor(
+        user_id=api_key.created_by_user_id,
+        clerk_user_id="",
+        email="",
+        org_id=api_key.org_id,
+        org_role=None,
+        auth_method="api_key",
+        api_key_scopes=frozenset(api_key.scopes or ()),
+        api_key_id=api_key.id,
+    )
+
+
+def missing_scopes(actor: Actor, required: tuple[str, ...]) -> set[str]:
+    """Pure set difference — the required scopes the actor's key lacks. Extracted so the
+    authorization decision is unit-testable without constructing a request."""
+    return set(required) - actor.api_key_scopes
+
+
+def require_scopes(*required: str) -> Callable[[Actor], Awaitable[Actor]]:
+    """Dependency factory: gate an API endpoint on one or more `ApiScope` values. Returns a
+    dependency that resolves the API-key actor and raises `ForbiddenError` (403) if the key
+    is missing any required scope. Passing no scopes asserts only that a valid key was
+    presented (an authenticated "whoami").
+    """
+
+    async def _dependency(actor: Actor = Depends(get_api_actor)) -> Actor:
+        missing = missing_scopes(actor, required)
+        if missing:
+            raise ForbiddenError(
+                f"API key missing required scope(s): {', '.join(sorted(missing))}"
+            )
+        return actor
+
+    return _dependency
+
+
+async def get_api_actor_db(actor: Actor = Depends(get_api_actor)) -> AsyncGenerator[Any]:
+    """API-key counterpart to `get_actor_db`: an org-scoped `request_scoped_session` for
+    programmatic handlers. `user_id` is the key's creator so self-scoped RLS still resolves.
     """
     async with request_scoped_session(user_id=actor.user_id, org_id=actor.org_id) as db:
         yield db

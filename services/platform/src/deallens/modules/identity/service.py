@@ -19,7 +19,9 @@ from deallens.core.config import get_settings
 from deallens.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from deallens.modules.billing.service import recompute_entitlements
 from deallens.modules.identity.models import (
+    API_KEY_PREFIX,
     ApiKey,
+    ApiScope,
     AuditLog,
     Entitlement,
     InviteStatus,
@@ -36,7 +38,6 @@ from deallens.modules.identity.models import (
 settings = get_settings()
 
 INVITE_TTL_DAYS = 14
-API_KEY_PREFIX = "dlk"
 
 
 # --- Layer 2: entitlements (plan-based) — §16.2 --------------------------------------
@@ -264,11 +265,28 @@ async def invite_member(
     return invite
 
 
-async def accept_invite(db: AsyncSession, *, token: str, user_id: UUID) -> OrgMember:
+def emails_match(a: str, b: str) -> bool:
+    """Case- and whitespace-insensitive local comparison for invite redemption. Not a full
+    RFC-5321 canonicalization (we don't fold Gmail dots etc.) — just enough that "Alice@x.com "
+    and "alice@x.com" are the same person, which is all the invite-forwarding guard needs.
+    """
+    return a.strip().casefold() == b.strip().casefold()
+
+
+async def accept_invite(
+    db: AsyncSession, *, token: str, user_id: UUID, accepting_email: str
+) -> OrgMember:
+    """Redeem an invite token. The accepting user's email must match the address the invite
+    was issued to — otherwise a forwarded invite link would let *anyone* who received it join
+    the org (the vuln flagged in router.py's original docstring). The token alone is a
+    bearer credential; the email check binds it to the intended recipient.
+    """
     result = await db.execute(select(OrgInvite).where(OrgInvite.token == token))
     invite = result.scalar_one_or_none()
     if invite is None or invite.status != InviteStatus.PENDING:
         raise NotFoundError("Invite not found or already used")
+    if not emails_match(invite.email, accepting_email):
+        raise ForbiddenError("This invite was issued to a different email address")
     if invite.expires_at < datetime.now(UTC):
         invite.status = InviteStatus.EXPIRED
         await db.flush()
@@ -359,7 +377,22 @@ async def remove_member(
 
 
 def _hash_api_key(plaintext: str) -> str:
+    # SHA-256 with no salt/stretching is deliberate and correct here: the secret is a
+    # 256-bit random token, not a low-entropy human password, so there is nothing for a
+    # slow KDF (argon2/bcrypt) to protect against — brute force is already infeasible, and a
+    # fast digest keeps per-request key auth cheap. (Passwords are Clerk's problem, §16.1.)
     return hashlib.sha256(plaintext.encode("utf-8")).hexdigest()
+
+
+def validate_scopes(scopes: list[str]) -> None:
+    """Reject any scope outside the `ApiScope` vocabulary. Called before minting a key so a
+    caller can't persist a typo'd (permanently useless) or speculative (silently over-broad
+    once we add that scope) grant.
+    """
+    valid = {s.value for s in ApiScope}
+    unknown = sorted(set(scopes) - valid)
+    if unknown:
+        raise ValidationError(f"Unknown API scope(s): {', '.join(unknown)}")
 
 
 async def create_api_key(
@@ -368,6 +401,7 @@ async def create_api_key(
     """Returns `(record, plaintext_secret)`. The plaintext is shown exactly once — only
     `key_hash` is persisted, so a leaked database dump can't be replayed as a working key.
     """
+    validate_scopes(scopes)
     secret = f"{API_KEY_PREFIX}_{secrets.token_urlsafe(32)}"
     api_key = ApiKey(
         org_id=org_id,

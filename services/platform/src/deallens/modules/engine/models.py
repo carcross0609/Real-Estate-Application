@@ -21,7 +21,6 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Numeric,
@@ -35,6 +34,7 @@ from sqlalchemy.sql import func
 from deallens.core.db import Base
 from deallens.core.enums import Strategy
 from deallens.core.ids import uuid7
+from deallens.core.sa_types import pg_enum
 from deallens.modules.identity.models import TimestampMixin
 
 
@@ -77,9 +77,9 @@ class CompSet(TimestampMixin, Base):
     subject_property_id: Mapped[UUID] = mapped_column(
         ForeignKey("properties.id", ondelete="CASCADE")
     )
-    kind: Mapped[CompSetKind] = mapped_column(Enum(CompSetKind, name="comp_set_kind"))
+    kind: Mapped[CompSetKind] = mapped_column(pg_enum(CompSetKind, name="comp_set_kind"))
     created_by: Mapped[CompCreatedBy] = mapped_column(
-        Enum(CompCreatedBy, name="comp_created_by"), default=CompCreatedBy.SYSTEM
+        pg_enum(CompCreatedBy, name="comp_created_by"), default=CompCreatedBy.SYSTEM
     )
     org_id: Mapped[UUID | None] = mapped_column(ForeignKey("orgs.id", ondelete="CASCADE"))
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
@@ -128,7 +128,7 @@ class Valuation(TimestampMixin, Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid7)
     property_id: Mapped[UUID] = mapped_column(ForeignKey("properties.id", ondelete="CASCADE"))
-    kind: Mapped[ValuationKind] = mapped_column(Enum(ValuationKind, name="valuation_kind"))
+    kind: Mapped[ValuationKind] = mapped_column(pg_enum(ValuationKind, name="valuation_kind"))
     point: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     low: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     high: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
@@ -161,7 +161,7 @@ class Analysis(TimestampMixin, Base):
     listing_id: Mapped[UUID | None] = mapped_column(ForeignKey("listings.id", ondelete="SET NULL"))
     engine_version: Mapped[str] = mapped_column(String(32))
     assumption_set: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)  # full snapshot
-    strategy: Mapped[Strategy] = mapped_column(Enum(Strategy, name="strategy"))
+    strategy: Mapped[Strategy] = mapped_column(pg_enum(Strategy, name="strategy"))
     outputs: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)  # EngineOutputBlock
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -186,7 +186,7 @@ class Scenario(TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text)
     engine_version: Mapped[str] = mapped_column(String(32))
     assumption_set: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-    strategy: Mapped[Strategy] = mapped_column(Enum(Strategy, name="strategy"))
+    strategy: Mapped[Strategy] = mapped_column(pg_enum(Strategy, name="strategy"))
     outputs: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     computed_at: Mapped[datetime] = mapped_column(

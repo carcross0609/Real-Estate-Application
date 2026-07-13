@@ -17,7 +17,6 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Numeric,
@@ -28,6 +27,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from deallens.core.db import Base
 from deallens.core.ids import uuid7
+from deallens.core.sa_types import pg_enum
 from deallens.modules.identity.models import TimestampMixin
 
 
@@ -67,7 +67,7 @@ class Market(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255))
     state: Mapped[str] = mapped_column(String(2))
     status: Mapped[MarketStatus] = mapped_column(
-        Enum(MarketStatus, name="market_status"), default=MarketStatus.ONBOARDING, index=True
+        pg_enum(MarketStatus, name="market_status"), default=MarketStatus.ONBOARDING, index=True
     )
     timezone: Mapped[str] = mapped_column(String(64), default="America/New_York")
     boundary: Mapped[WKBElement | None] = mapped_column(
@@ -106,7 +106,7 @@ class MarketStat(TimestampMixin, Base):
     market_id: Mapped[UUID] = mapped_column(
         ForeignKey("markets.id", ondelete="CASCADE"), index=True
     )
-    geo_level: Mapped[GeoLevel] = mapped_column(Enum(GeoLevel, name="geo_level"))
+    geo_level: Mapped[GeoLevel] = mapped_column(pg_enum(GeoLevel, name="geo_level"))
     # Code at the given level: CBSA / FIPS county / city name / ZIP / tract GEOID.
     geo_id: Mapped[str] = mapped_column(String(32))
     metric: Mapped[str] = mapped_column(String(64))  # controlled vocab (03 §28.3)

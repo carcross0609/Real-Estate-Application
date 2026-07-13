@@ -108,3 +108,13 @@ class ApiKeyOut(BaseModel):
     last_used_at: datetime | None
     revoked_at: datetime | None
     created_at: datetime
+
+
+class ApiIdentityOut(BaseModel):
+    """Response of the programmatic `GET /api/whoami` — lets an API consumer confirm their
+    key is valid and see exactly which org it acts on and which scopes it holds."""
+
+    org_id: UUID
+    api_key_id: UUID | None
+    scopes: list[str]
+    auth_method: str

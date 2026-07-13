@@ -16,7 +16,6 @@ from uuid import UUID
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -31,6 +30,7 @@ from sqlalchemy.sql import func
 
 from deallens.core.db import Base
 from deallens.core.ids import uuid7
+from deallens.core.sa_types import pg_enum
 from deallens.modules.identity.models import TimestampMixin
 
 
@@ -77,7 +77,7 @@ class PhotoAnalysis(TimestampMixin, Base):
     photo_id: Mapped[UUID] = mapped_column(ForeignKey("listing_photos.id", ondelete="CASCADE"))
     pipeline_version: Mapped[str] = mapped_column(String(32))
     model_id: Mapped[str] = mapped_column(String(64))
-    room_type: Mapped[RoomType | None] = mapped_column(Enum(RoomType, name="room_type"))
+    room_type: Mapped[RoomType | None] = mapped_column(pg_enum(RoomType, name="room_type"))
     condition_grade: Mapped[int | None] = mapped_column(SmallInteger)  # 1–5, see CHECK
     findings: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)  # PhotoFindings
     red_flags: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)  # [RedFlag]

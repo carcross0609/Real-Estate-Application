@@ -17,7 +17,6 @@ from uuid import UUID
 from sqlalchemy import (
     Boolean,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     String,
@@ -32,6 +31,7 @@ from sqlalchemy.sql import func
 from deallens.core.db import Base
 from deallens.core.enums import Strategy
 from deallens.core.ids import uuid7
+from deallens.core.sa_types import pg_enum
 from deallens.modules.identity.models import AlertLatency, TimestampMixin
 
 
@@ -85,13 +85,13 @@ class BuyBox(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255))
     market_id: Mapped[UUID | None] = mapped_column(ForeignKey("markets.id", ondelete="SET NULL"))
     filters: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)  # BuyBoxFilters
-    strategy: Mapped[Strategy | None] = mapped_column(Enum(Strategy, name="strategy"))
+    strategy: Mapped[Strategy | None] = mapped_column(pg_enum(Strategy, name="strategy"))
     assumption_overrides: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     alert_channels: Mapped[list[AlertChannel]] = mapped_column(
-        ARRAY(Enum(AlertChannel, name="alert_channel")), default=list
+        ARRAY(pg_enum(AlertChannel, name="alert_channel")), default=list
     )
     alert_latency: Mapped[AlertLatency] = mapped_column(
-        Enum(AlertLatency, name="alert_latency"), default=AlertLatency.DAILY
+        pg_enum(AlertLatency, name="alert_latency"), default=AlertLatency.DAILY
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -131,10 +131,12 @@ class Notification(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid7)
     org_id: Mapped[UUID] = mapped_column(ForeignKey("orgs.id", ondelete="CASCADE"))
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    kind: Mapped[NotificationKind] = mapped_column(Enum(NotificationKind, name="notification_kind"))
-    channel: Mapped[AlertChannel] = mapped_column(Enum(AlertChannel, name="alert_channel"))
+    kind: Mapped[NotificationKind] = mapped_column(
+        pg_enum(NotificationKind, name="notification_kind")
+    )
+    channel: Mapped[AlertChannel] = mapped_column(pg_enum(AlertChannel, name="alert_channel"))
     status: Mapped[NotificationStatus] = mapped_column(
-        Enum(NotificationStatus, name="notification_status"),
+        pg_enum(NotificationStatus, name="notification_status"),
         default=NotificationStatus.QUEUED,
     )
     title: Mapped[str] = mapped_column(String(255))

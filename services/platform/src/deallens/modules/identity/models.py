@@ -11,13 +11,14 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from deallens.core.db import Base
 from deallens.core.ids import uuid7
+from deallens.core.sa_types import pg_enum
 
 
 class TimestampMixin:
@@ -29,6 +30,12 @@ class TimestampMixin:
     )
 
 
+# Programmatic-access key prefix (§15 "API keys scoped + metered"). Defined here — the
+# lowest module in the identity import graph — so both `service` (mints keys) and
+# `core.auth` (authenticates them) reference one constant without importing each other.
+API_KEY_PREFIX = "dlk"
+
+
 class OrgRole(enum.StrEnum):
     """§16.2 role hierarchy, org-scoped. Ordered owner > admin > analyst > viewer."""
 
@@ -36,6 +43,19 @@ class OrgRole(enum.StrEnum):
     ADMIN = "admin"
     ANALYST = "analyst"
     VIEWER = "viewer"
+
+
+class ApiScope(enum.StrEnum):
+    """The closed vocabulary of capabilities an API key may be granted (§16.2 layer 1, but
+    for the programmatic surface: keys authorize via *scopes*, humans via *roles*). Keys are
+    validated against this set at creation, so a typo'd scope fails loudly instead of
+    silently granting nothing. Add a value here the moment a programmatic endpoint needs it.
+    """
+
+    PROPERTIES_READ = "properties:read"
+    ANALYSES_READ = "analyses:read"
+    ANALYSES_WRITE = "analyses:write"
+    ORG_READ = "org:read"
 
 
 class SubscriptionPlan(enum.StrEnum):
@@ -110,7 +130,7 @@ class OrgMember(TimestampMixin, Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid7)
     org_id: Mapped[UUID] = mapped_column(ForeignKey("orgs.id", ondelete="CASCADE"), index=True)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    role: Mapped[OrgRole] = mapped_column(Enum(OrgRole, name="org_role"), default=OrgRole.VIEWER)
+    role: Mapped[OrgRole] = mapped_column(pg_enum(OrgRole, name="org_role"), default=OrgRole.VIEWER)
 
     org: Mapped[Org] = relationship(back_populates="members")
     user: Mapped[User] = relationship(back_populates="memberships")
@@ -124,12 +144,12 @@ class OrgInvite(TimestampMixin, Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid7)
     org_id: Mapped[UUID] = mapped_column(ForeignKey("orgs.id", ondelete="CASCADE"), index=True)
     email: Mapped[str] = mapped_column(String(320), index=True)
-    role: Mapped[OrgRole] = mapped_column(Enum(OrgRole, name="org_role"), default=OrgRole.VIEWER)
+    role: Mapped[OrgRole] = mapped_column(pg_enum(OrgRole, name="org_role"), default=OrgRole.VIEWER)
     invited_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
     # >=128-bit random token (§15 "Share & PDF surfaces" convention applied here too).
     token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     status: Mapped[InviteStatus] = mapped_column(
-        Enum(InviteStatus, name="invite_status"), default=InviteStatus.PENDING
+        pg_enum(InviteStatus, name="invite_status"), default=InviteStatus.PENDING
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
@@ -146,10 +166,10 @@ class Subscription(TimestampMixin, Base):
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255))
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(255))
     plan: Mapped[SubscriptionPlan] = mapped_column(
-        Enum(SubscriptionPlan, name="subscription_plan"), default=SubscriptionPlan.BASIC
+        pg_enum(SubscriptionPlan, name="subscription_plan"), default=SubscriptionPlan.BASIC
     )
     status: Mapped[SubscriptionStatus] = mapped_column(
-        Enum(SubscriptionStatus, name="subscription_status"), default=SubscriptionStatus.TRIALING
+        pg_enum(SubscriptionStatus, name="subscription_status"), default=SubscriptionStatus.TRIALING
     )
     current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -168,7 +188,7 @@ class Entitlement(TimestampMixin, Base):
     markets_limit: Mapped[int] = mapped_column(Integer, default=1)
     seats: Mapped[int] = mapped_column(Integer, default=1)
     alert_latency: Mapped[AlertLatency] = mapped_column(
-        Enum(AlertLatency, name="alert_latency"), default=AlertLatency.DAILY
+        pg_enum(AlertLatency, name="alert_latency"), default=AlertLatency.DAILY
     )
     exports_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     pipeline_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

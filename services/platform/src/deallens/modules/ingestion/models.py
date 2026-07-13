@@ -24,7 +24,6 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -42,6 +41,7 @@ from sqlalchemy.sql import func
 
 from deallens.core.db import Base
 from deallens.core.ids import uuid7
+from deallens.core.sa_types import pg_enum
 from deallens.modules.identity.models import TimestampMixin
 
 
@@ -105,7 +105,7 @@ class DataSource(TimestampMixin, Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid7)
     source_key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(255))
-    tier: Mapped[DataSourceTier] = mapped_column(Enum(DataSourceTier, name="data_source_tier"))
+    tier: Mapped[DataSourceTier] = mapped_column(pg_enum(DataSourceTier, name="data_source_tier"))
     license_policy: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -156,7 +156,7 @@ class Property(TimestampMixin, Base):
     )
     market_id: Mapped[UUID | None] = mapped_column(ForeignKey("markets.id", ondelete="SET NULL"))
     property_type: Mapped[PropertyType | None] = mapped_column(
-        Enum(PropertyType, name="property_type")
+        pg_enum(PropertyType, name="property_type")
     )
     beds: Mapped[int | None] = mapped_column(SmallInteger)
     baths: Mapped[Decimal | None] = mapped_column(Numeric(3, 1))
@@ -192,7 +192,7 @@ class Listing(TimestampMixin, Base):
     property_id: Mapped[UUID] = mapped_column(ForeignKey("properties.id", ondelete="CASCADE"))
     source_id: Mapped[UUID] = mapped_column(ForeignKey("data_sources.id", ondelete="RESTRICT"))
     source_listing_key: Mapped[str] = mapped_column(String(128))
-    status: Mapped[ListingStatus] = mapped_column(Enum(ListingStatus, name="listing_status"))
+    status: Mapped[ListingStatus] = mapped_column(pg_enum(ListingStatus, name="listing_status"))
     list_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     close_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     list_date: Mapped[date | None] = mapped_column(Date)
@@ -223,7 +223,7 @@ class ListingEvent(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid7)
     listing_id: Mapped[UUID] = mapped_column(ForeignKey("listings.id", ondelete="CASCADE"))
     event_type: Mapped[ListingEventType] = mapped_column(
-        Enum(ListingEventType, name="listing_event_type")
+        pg_enum(ListingEventType, name="listing_event_type")
     )
     old: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     new: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

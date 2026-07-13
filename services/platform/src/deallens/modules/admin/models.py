@@ -17,7 +17,6 @@ from uuid import UUID
 from sqlalchemy import (
     Boolean,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -31,6 +30,7 @@ from sqlalchemy.sql import func
 
 from deallens.core.db import Base
 from deallens.core.ids import uuid7
+from deallens.core.sa_types import pg_enum
 from deallens.modules.identity.models import TimestampMixin
 
 
@@ -88,7 +88,7 @@ class IngestionRun(TimestampMixin, Base):
     source_id: Mapped[UUID] = mapped_column(ForeignKey("data_sources.id", ondelete="CASCADE"))
     market_id: Mapped[UUID | None] = mapped_column(ForeignKey("markets.id", ondelete="SET NULL"))
     status: Mapped[IngestionRunStatus] = mapped_column(
-        Enum(IngestionRunStatus, name="ingestion_run_status"), default=IngestionRunStatus.RUNNING
+        pg_enum(IngestionRunStatus, name="ingestion_run_status"), default=IngestionRunStatus.RUNNING
     )
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -116,9 +116,9 @@ class DqFlag(TimestampMixin, Base):
     subject_id: Mapped[UUID] = mapped_column()
     market_id: Mapped[UUID | None] = mapped_column(ForeignKey("markets.id", ondelete="SET NULL"))
     rule: Mapped[str] = mapped_column(String(64))
-    severity: Mapped[DqSeverity] = mapped_column(Enum(DqSeverity, name="dq_severity"))
+    severity: Mapped[DqSeverity] = mapped_column(pg_enum(DqSeverity, name="dq_severity"))
     status: Mapped[DqStatus] = mapped_column(
-        Enum(DqStatus, name="dq_status"), default=DqStatus.OPEN
+        pg_enum(DqStatus, name="dq_status"), default=DqStatus.OPEN
     )
     details: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -173,7 +173,7 @@ class AiCall(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid7)
     model: Mapped[str] = mapped_column(String(64))
     prompt_version: Mapped[str | None] = mapped_column(String(32))
-    purpose: Mapped[AiCallPurpose] = mapped_column(Enum(AiCallPurpose, name="ai_call_purpose"))
+    purpose: Mapped[AiCallPurpose] = mapped_column(pg_enum(AiCallPurpose, name="ai_call_purpose"))
     subject_type: Mapped[str | None] = mapped_column(String(32))
     subject_id: Mapped[UUID | None] = mapped_column()
     market_id: Mapped[UUID | None] = mapped_column(ForeignKey("markets.id", ondelete="SET NULL"))
@@ -203,7 +203,9 @@ class FeedbackLabel(TimestampMixin, Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid7)
     org_id: Mapped[UUID] = mapped_column(ForeignKey("orgs.id", ondelete="CASCADE"))
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    subject: Mapped[FeedbackSubject] = mapped_column(Enum(FeedbackSubject, name="feedback_subject"))
+    subject: Mapped[FeedbackSubject] = mapped_column(
+        pg_enum(FeedbackSubject, name="feedback_subject")
+    )
     subject_id: Mapped[UUID] = mapped_column()
     submitted_value: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     context: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)

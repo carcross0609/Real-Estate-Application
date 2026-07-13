@@ -3,7 +3,7 @@ sandbox). These lock in the invariants of docs/02 §11: the table set, tenant sc
 partition-key PKs, money-as-numeric, and that every FK column is indexed (§20 SQL standard).
 """
 
-from sqlalchemy import Float, Numeric
+from sqlalchemy import ARRAY, Enum, Float, Numeric
 
 import deallens.models  # noqa: F401  — populates Base.metadata
 from deallens.core.db import Base
@@ -173,6 +173,34 @@ def test_foreign_keys_are_indexed() -> None:
             if col.foreign_keys and col.name not in indexed_first_cols:
                 unindexed.append(f"{table.name}.{col.name}")
     assert not unindexed, f"unindexed foreign-key columns: {unindexed}"
+
+
+def test_every_enum_column_persists_by_value_not_name() -> None:
+    """Regression guard for the `Enum` vs `pg_enum` bug: our migrations create every
+    Postgres enum type from the members' (lowercase) *values*, so the ORM must persist the
+    value too. A bare `sa.Enum(SomeStrEnum)` defaults to the member *name* and raises
+    `invalid input value for enum … "VIEWER"` on the first real-DB insert. Assert every enum
+    column (including those wrapped in ARRAY) carries a `values_callable` that yields the
+    member values. Use `pg_enum` (core/sa_types) for all enum columns.
+    """
+    offenders: list[str] = []
+    for table in Base.metadata.tables.values():
+        for col in table.columns:
+            coltype = col.type
+            if isinstance(coltype, ARRAY):
+                coltype = coltype.item_type
+            if not isinstance(coltype, Enum):
+                continue
+            py_enum = coltype.enum_class
+            if py_enum is None:  # a plain string-list Enum, not backed by a Python enum
+                continue
+            produced = coltype.enums  # the resolved string labels SQLAlchemy will send
+            expected = [m.value for m in py_enum]
+            if produced != expected:
+                offenders.append(f"{table.name}.{col.name} sends {produced}, DDL has {expected}")
+    assert not offenders, (
+        "enum columns not persisting by value (use pg_enum): " + "; ".join(offenders)
+    )
 
 
 def test_scores_top25_index_exists() -> None:
