@@ -19,13 +19,26 @@ down_revision: str | None = None
 branch_labels: Sequence[str] | None = None
 depends_on: Sequence[str] | None = None
 
-org_role = postgresql.ENUM("owner", "admin", "analyst", "viewer", name="org_role")
-invite_status = postgresql.ENUM("pending", "accepted", "revoked", "expired", name="invite_status")
-subscription_plan = postgresql.ENUM("basic", "pro", "team", name="subscription_plan")
-subscription_status = postgresql.ENUM(
-    "trialing", "active", "past_due", "canceled", name="subscription_status"
+# `create_type=False`: the types are created once by the explicit `.create()` loop in
+# upgrade(). Without this, an enum reused across tables (org_role in org_members AND
+# org_invites) also emits an inline CREATE TYPE inside CREATE TABLE — which Alembic runs
+# without checkfirst, so a fresh `alembic upgrade` fails with "type already exists". Same
+# pattern as migrations 0002–0005.
+org_role = postgresql.ENUM(
+    "owner", "admin", "analyst", "viewer", name="org_role", create_type=False
 )
-alert_latency = postgresql.ENUM("instant", "hourly", "daily", name="alert_latency")
+invite_status = postgresql.ENUM(
+    "pending", "accepted", "revoked", "expired", name="invite_status", create_type=False
+)
+subscription_plan = postgresql.ENUM(
+    "basic", "pro", "team", name="subscription_plan", create_type=False
+)
+subscription_status = postgresql.ENUM(
+    "trialing", "active", "past_due", "canceled", name="subscription_status", create_type=False
+)
+alert_latency = postgresql.ENUM(
+    "instant", "hourly", "daily", name="alert_latency", create_type=False
+)
 
 IDENTITY_TABLES = (
     "users",

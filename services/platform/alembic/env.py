@@ -6,9 +6,9 @@ from alembic import context
 from deallens.core.config import get_settings
 from deallens.core.db import Base
 
-# Import every module's models package here so Base.metadata is fully populated for
-# autogenerate — new modules must add their import alongside identity's.
-from deallens.modules.identity import models as identity_models  # noqa: F401
+# Import every module's models so Base.metadata is fully populated for autogenerate/offline
+# render. `deallens.models` is the single aggregator — new modules add their import there.
+import deallens.models  # noqa: F401
 
 config = context.config
 

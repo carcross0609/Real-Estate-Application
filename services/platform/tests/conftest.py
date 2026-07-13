@@ -15,9 +15,15 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from jose import jwt as jose_jwt
 
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://deallens_app:deallens_app_dev@localhost:5432/deallens")
-os.environ.setdefault("DATABASE_URL_SYSTEM", "postgresql+asyncpg://deallens:deallens_dev@localhost:5432/deallens")
-os.environ.setdefault("DATABASE_URL_SYNC", "postgresql+psycopg://deallens:deallens_dev@localhost:5432/deallens")
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+asyncpg://deallens_app:deallens_app_dev@localhost:5432/deallens"
+)
+os.environ.setdefault(
+    "DATABASE_URL_SYSTEM", "postgresql+asyncpg://deallens:deallens_dev@localhost:5432/deallens"
+)
+os.environ.setdefault(
+    "DATABASE_URL_SYNC", "postgresql+psycopg://deallens:deallens_dev@localhost:5432/deallens"
+)
 os.environ.setdefault("CLERK_ISSUER_URL", "https://test.clerk.accounts.dev")
 os.environ.setdefault("CLERK_JWKS_URL", "https://test.clerk.accounts.dev/.well-known/jwks.json")
 os.environ.setdefault("CLERK_SECRET_KEY", "sk_test_dummy")
@@ -30,9 +36,8 @@ def rsa_keypair():
     key — real Clerk sessions are also RS256, so verification logic under test is
     identical.
     """
-    from jose.backends.cryptography_backend import CryptographyRSAKey
-
     from cryptography.hazmat.primitives.asymmetric import rsa
+    from jose.backends.cryptography_backend import CryptographyRSAKey
 
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     jose_key = CryptographyRSAKey(private_key, algorithm="RS256")
@@ -47,7 +52,10 @@ def make_session_token(rsa_keypair):
     private_key, _jwks = rsa_keypair
 
     def _make(
-        *, sub: str = "user_test123", issuer: str = "https://test.clerk.accounts.dev", expires_in: int = 3600
+        *,
+        sub: str = "user_test123",
+        issuer: str = "https://test.clerk.accounts.dev",
+        expires_in: int = 3600,
     ) -> str:
         now = datetime.now(UTC)
         claims = {
@@ -56,7 +64,9 @@ def make_session_token(rsa_keypair):
             "iat": now,
             "exp": now + timedelta(seconds=expires_in),
         }
-        return jose_jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": "test-key-1"})
+        return jose_jwt.encode(
+            claims, private_key, algorithm="RS256", headers={"kid": "test-key-1"}
+        )
 
     return _make
 
@@ -74,6 +84,10 @@ def sign_webhook(svix_secret):
         wh = Webhook(svix_secret)
         ts = datetime.now(UTC)
         signature = wh.sign(msg_id, ts, payload)
-        return {"svix-id": msg_id, "svix-timestamp": str(int(ts.timestamp())), "svix-signature": signature}
+        return {
+            "svix-id": msg_id,
+            "svix-timestamp": str(int(ts.timestamp())),
+            "svix-signature": signature,
+        }
 
     return _sign

@@ -9,9 +9,10 @@ Two engines, two trust levels:
   creating a brand-new user/org shadow row. Never used to serve a user request.
 
 Tenant isolation pooling gotcha (§11.1): RLS policies read `current_setting('app.*')` GUCs.
-Because connections are pooled, those GUCs must be set with `SET LOCAL` inside every
-request's transaction — never assumed to persist across checkouts. `request_scoped_session()`
-is the only sanctioned way to get a session for a user request.
+Because connections are pooled, those GUCs must be set transaction-locally (via
+`set_config(key, value, true)`) inside every request's transaction — never assumed to
+persist across checkouts. `request_scoped_session()` is the only sanctioned way to get a
+session for a user request.
 """
 
 from collections.abc import AsyncGenerator
@@ -58,10 +59,20 @@ async def request_scoped_session(
     selected (permits org-scoped reads across every other identity table).
     """
     async with _session_maker() as session, session.begin():
+        # `set_config(key, value, is_local=true)` is the transaction-local equivalent of
+        # `SET LOCAL key = value`, but — unlike `SET`, a utility statement that rejects bind
+        # parameters under the extended query protocol (asyncpg/psycopg both use it) — it is
+        # an ordinary function call that accepts a bound value. `SET LOCAL app.org_id = :v`
+        # raises `syntax error at or near "$1"` on asyncpg; this form is what the RLS
+        # policies in the migrations read via `current_setting('app.org_id')`.
         if user_id is not None:
-            await session.execute(text("SET LOCAL app.user_id = :v"), {"v": str(user_id)})
+            await session.execute(
+                text("SELECT set_config('app.user_id', :v, true)"), {"v": str(user_id)}
+            )
         if org_id is not None:
-            await session.execute(text("SET LOCAL app.org_id = :v"), {"v": str(org_id)})
+            await session.execute(
+                text("SELECT set_config('app.org_id', :v, true)"), {"v": str(org_id)}
+            )
         yield session
 
 

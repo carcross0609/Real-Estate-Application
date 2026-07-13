@@ -10,7 +10,7 @@ import pytest
 from deallens.core.auth import Actor
 from deallens.core.errors import ForbiddenError
 from deallens.modules.identity.models import OrgRole
-from deallens.modules.identity.service import Action, ROLE_PERMISSIONS, authorize
+from deallens.modules.identity.service import ROLE_PERMISSIONS, Action, authorize
 
 ORG_ID = uuid4()
 
