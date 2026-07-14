@@ -2,13 +2,12 @@ from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 
-from alembic import context
-from deallens.core.config import get_settings
-from deallens.core.db import Base
-
 # Import every module's models so Base.metadata is fully populated for autogenerate/offline
 # render. `deallens.models` is the single aggregator — new modules add their import there.
 import deallens.models  # noqa: F401
+from alembic import context
+from deallens.core.config import get_settings
+from deallens.core.db import Base
 
 config = context.config
 
