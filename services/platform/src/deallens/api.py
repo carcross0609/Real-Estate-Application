@@ -10,6 +10,7 @@ from deallens.core.errors import register_error_handlers
 from deallens.core.logging import configure_logging
 from deallens.modules.identity.router import router as identity_router
 from deallens.modules.identity.webhooks import router as identity_webhooks_router
+from deallens.modules.search.router import router as search_router
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -27,6 +28,7 @@ app.add_middleware(
 register_error_handlers(app)
 
 app.include_router(identity_router, prefix="/v1")
+app.include_router(search_router, prefix="/v1")
 app.include_router(identity_webhooks_router, prefix="/webhooks")
 
 

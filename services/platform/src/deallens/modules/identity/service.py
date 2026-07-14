@@ -59,6 +59,18 @@ async def check_entitlement(db: AsyncSession, *, org_id: UUID, key: str) -> None
         raise ForbiddenError(f"Current plan does not include '{key}'")
 
 
+async def market_slot_limit(db: AsyncSession, *, org_id: UUID) -> int:
+    """The org's plan-derived cap on user-defined search areas (FR-001: Basic 1 / Pro 5 /
+    Team 25 — the `entitlements.markets_limit` value). Falls back to 1 (the Basic default)
+    when no entitlement row exists yet. Exposed as a numeric limit — distinct from the boolean
+    `check_entitlement` — so `search` enforces the count without reaching into identity's
+    tables directly (§19).
+    """
+    result = await db.execute(select(Entitlement).where(Entitlement.org_id == org_id))
+    entitlement = result.scalar_one_or_none()
+    return entitlement.markets_limit if entitlement is not None else 1
+
+
 # --- Layer 1: RBAC — §16.2 -------------------------------------------------------------
 
 
@@ -480,6 +492,30 @@ async def update_profile(
         user.preferences = {**user.preferences, **preferences}
     await db.flush()
     return user
+
+
+async def merge_user_preferences(
+    db: AsyncSession, *, user_id: UUID, namespace: str, value: dict[str, Any]
+) -> dict[str, Any]:
+    """Merge `value` into `users.preferences[namespace]`, returning the new namespace dict.
+
+    The cross-module preference write path (§19): other modules (e.g. `search`) own a
+    *namespace* inside the shared `users.preferences` JSONB but reach it only through this
+    identity-owned helper, never by touching the `users` row directly. A `None` value in
+    `value` deletes that key so a preference can be cleared, not just set.
+    """
+    user = await db.get(User, user_id)
+    if user is None:
+        raise NotFoundError("User not found")
+    current = dict(user.preferences.get(namespace, {}))
+    for k, v in value.items():
+        if v is None:
+            current.pop(k, None)
+        else:
+            current[k] = v
+    user.preferences = {**user.preferences, namespace: current}
+    await db.flush()
+    return current
 
 
 async def request_account_deletion(db: AsyncSession, *, user_id: UUID) -> User:

@@ -58,6 +58,8 @@ EXPECTED_TABLES = {
     "model_versions",
     "prompt_versions",
     "ai_calls",
+    # SEARCH (0006)
+    "saved_searches",
 }
 
 # Tables that carry tenant data → must have org_id (RLS scopes them; see the migrations).
@@ -79,6 +81,7 @@ ORG_SCOPED_TABLES = {
     "notes",
     "pipeline_deals",
     "feedback_labels",
+    "saved_searches",
 }
 
 # Shared licensed/reference data → must NOT be org-scoped (every tenant sees it; §11.1).

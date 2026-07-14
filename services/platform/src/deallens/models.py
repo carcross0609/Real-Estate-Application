@@ -16,6 +16,7 @@ from deallens.modules.ingestion import models as ingestion_models
 from deallens.modules.markets import models as markets_models
 from deallens.modules.reports import models as reports_models
 from deallens.modules.scoring import models as scoring_models
+from deallens.modules.search import models as search_models
 from deallens.modules.vision import models as vision_models
 
 __all__ = [
@@ -28,5 +29,6 @@ __all__ = [
     "markets_models",
     "reports_models",
     "scoring_models",
+    "search_models",
     "vision_models",
 ]
