@@ -1,0 +1,376 @@
+@import "tailwindcss";
+
+/* ================================================================================
+   DealLens design tokens — canonical copy mirrored in packages/design-tokens.
+   Dark-first (PRD §21 #6). One cool accent ("signal"); green/amber/red are
+   reserved exclusively for deal quality & risk — never decorative.
+   ================================================================================ */
+
+:root,
+.dark {
+  /* Surfaces — deep blue-graphite ramp, hue 222 */
+  --canvas: #0a0d14;
+  --panel: #0e1219;
+  --card: #121722;
+  --raise: #171d2b;
+  --overlay: #1b2233;
+
+  /* Strokes */
+  --stroke: #1e2635;
+  --stroke-strong: #2a3448;
+  --hairline: rgba(148, 163, 199, 0.09);
+
+  /* Ink */
+  --ink: #e9edf6;
+  --ink-2: #a4aec6;
+  --ink-3: #66718c;
+  --ink-faint: #454f66;
+
+  /* Signal (the one accent) */
+  --accent: #5e7cff;
+  --accent-2: #7d95ff;
+  --accent-soft: rgba(94, 124, 255, 0.13);
+  --accent-ink: #b7c5ff;
+
+  /* Deal-quality grades (color + letter, used identically everywhere) */
+  --grade-a: #2fd37f;
+  --grade-b: #9ade4b;
+  --grade-c: #f2c239;
+  --grade-d: #f59e4b;
+  --grade-f: #f16a5e;
+  --grade-a-soft: rgba(47, 211, 127, 0.13);
+  --grade-b-soft: rgba(154, 222, 75, 0.13);
+  --grade-c-soft: rgba(242, 194, 57, 0.13);
+  --grade-d-soft: rgba(245, 158, 75, 0.14);
+  --grade-f-soft: rgba(241, 106, 94, 0.14);
+
+  /* Financial deltas (quality-signal, sparing) */
+  --pos: #2fd37f;
+  --neg: #f16a5e;
+
+  /* Destructive */
+  --danger: #e5484d;
+  --danger-soft: rgba(229, 72, 77, 0.14);
+
+  /* Charts — colorblind-aware categorical set; grid stays hairline */
+  --viz-1: #5e7cff;
+  --viz-2: #22d3ee;
+  --viz-3: #a78bfa;
+  --viz-4: #f472b6;
+  --viz-5: #fbbf24;
+  --viz-6: #2dd4bf;
+
+  --shadow-raise: 0 0 0 1px var(--stroke), 0 8px 24px -8px rgba(2, 6, 16, 0.6);
+  --shadow-pop: 0 0 0 1px var(--stroke-strong), 0 16px 48px -12px rgba(2, 6, 16, 0.75);
+
+  color-scheme: dark;
+}
+
+.light {
+  --canvas: #f5f6f9;
+  --panel: #fbfcfd;
+  --card: #ffffff;
+  --raise: #f2f4f8;
+  --overlay: #ffffff;
+
+  --stroke: #e3e7ef;
+  --stroke-strong: #cdd4e1;
+  --hairline: rgba(23, 32, 56, 0.08);
+
+  --ink: #161b26;
+  --ink-2: #4d5871;
+  --ink-3: #8590a6;
+  --ink-faint: #aeb7c9;
+
+  --accent: #4560e6;
+  --accent-2: #3149c9;
+  --accent-soft: rgba(69, 96, 230, 0.1);
+  --accent-ink: #3149c9;
+
+  --grade-a: #0e9f5c;
+  --grade-b: #689812;
+  --grade-c: #b98a04;
+  --grade-d: #d9640e;
+  --grade-f: #d9433a;
+  --grade-a-soft: rgba(14, 159, 92, 0.11);
+  --grade-b-soft: rgba(104, 152, 18, 0.12);
+  --grade-c-soft: rgba(185, 138, 4, 0.13);
+  --grade-d-soft: rgba(217, 100, 14, 0.12);
+  --grade-f-soft: rgba(217, 67, 58, 0.11);
+
+  --pos: #0e9f5c;
+  --neg: #d9433a;
+
+  --danger: #d92d31;
+  --danger-soft: rgba(217, 45, 49, 0.1);
+
+  --viz-1: #4560e6;
+  --viz-2: #0e97b5;
+  --viz-3: #7c58d8;
+  --viz-4: #d34f92;
+  --viz-5: #c78a08;
+  --viz-6: #0d9e8d;
+
+  --shadow-raise: 0 0 0 1px var(--stroke), 0 4px 16px -6px rgba(23, 32, 56, 0.12);
+  --shadow-pop: 0 0 0 1px var(--stroke), 0 16px 48px -12px rgba(23, 32, 56, 0.22);
+
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-panel: var(--panel);
+  --color-card: var(--card);
+  --color-raise: var(--raise);
+  --color-overlay: var(--overlay);
+  --color-stroke: var(--stroke);
+  --color-stroke-strong: var(--stroke-strong);
+  --color-hairline: var(--hairline);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-faint: var(--ink-faint);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-grade-a: var(--grade-a);
+  --color-grade-b: var(--grade-b);
+  --color-grade-c: var(--grade-c);
+  --color-grade-d: var(--grade-d);
+  --color-grade-f: var(--grade-f);
+  --color-grade-a-soft: var(--grade-a-soft);
+  --color-grade-b-soft: var(--grade-b-soft);
+  --color-grade-c-soft: var(--grade-c-soft);
+  --color-grade-d-soft: var(--grade-d-soft);
+  --color-grade-f-soft: var(--grade-f-soft);
+  --color-pos: var(--pos);
+  --color-neg: var(--neg);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-viz-1: var(--viz-1);
+  --color-viz-2: var(--viz-2);
+  --color-viz-3: var(--viz-3);
+  --color-viz-4: var(--viz-4);
+  --color-viz-5: var(--viz-5);
+  --color-viz-6: var(--viz-6);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  --text-2xs: 0.6875rem; /* 11px — mono labels */
+  --text-2xs--line-height: 1rem;
+
+  --animate-fade-up: fade-up 0.35s cubic-bezier(0.21, 0.61, 0.35, 1) both;
+  --animate-fade-in: fade-in 0.25s ease-out both;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-pulse-dot: pulse-dot 2.2s ease-in-out infinite;
+
+  --ease-swift: cubic-bezier(0.21, 0.61, 0.35, 1);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ============================== Base ============================== */
+
+* {
+  border-color: var(--stroke);
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
+  text-rendering: optimizeLegibility;
+  min-height: 100%;
+}
+
+/* Every numeral in the product is tabular — spreadsheet discipline */
+.tnum,
+td,
+th {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+/* Thin, calm scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--stroke-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--stroke-strong);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Mono eyebrow — the terminal's labeling voice */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* Data figures */
+.figure {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Skeleton shimmer */
+.skeleton {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    100deg,
+    var(--raise) 40%,
+    var(--overlay) 50%,
+    var(--raise) 60%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+/* Interactive row / card lift */
+.lift {
+  transition:
+    transform 0.18s var(--ease-swift),
+    box-shadow 0.18s var(--ease-swift),
+    border-color 0.18s var(--ease-swift),
+    background-color 0.18s var(--ease-swift);
+}
+.lift:hover {
+  transform: translateY(-1px);
+}
+
+/* Recharts theming */
+.recharts-cartesian-grid line {
+  stroke: var(--hairline);
+}
+.recharts-text {
+  fill: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+.recharts-default-tooltip {
+  border-radius: 8px !important;
+}
+
+/* MapLibre chrome */
+.maplibregl-ctrl-group {
+  background: var(--card) !important;
+  box-shadow: var(--shadow-raise) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+.maplibregl-ctrl-group button {
+  background: var(--card) !important;
+}
+.maplibregl-ctrl-group button + button {
+  border-top: 1px solid var(--stroke) !important;
+}
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: invert(0.75);
+}
+.light .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: none;
+}
+.maplibregl-ctrl-attrib {
+  background: color-mix(in srgb, var(--canvas) 72%, transparent) !important;
+  font-size: 10px !important;
+  color: var(--ink-3) !important;
+}
+.maplibregl-ctrl-attrib a {
+  color: var(--ink-3) !important;
+}
+.maplibregl-popup-content {
+  background: var(--overlay) !important;
+  color: var(--ink) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--shadow-pop) !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+.maplibregl-popup-tip {
+  border-top-color: var(--overlay) !important;
+  border-bottom-color: var(--overlay) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
