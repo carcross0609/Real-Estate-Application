@@ -11,6 +11,8 @@ from deallens.core.logging import configure_logging
 from deallens.modules.engine.router import router as engine_router
 from deallens.modules.identity.router import router as identity_router
 from deallens.modules.identity.webhooks import router as identity_webhooks_router
+from deallens.modules.markets.router import router as markets_router
+from deallens.modules.reports.router import router as reports_router
 from deallens.modules.scoring.router import router as scoring_router
 from deallens.modules.search.router import router as search_router
 from deallens.modules.vision.router import router as vision_router
@@ -35,6 +37,8 @@ app.include_router(search_router, prefix="/v1")
 app.include_router(engine_router, prefix="/v1")
 app.include_router(vision_router, prefix="/v1")
 app.include_router(scoring_router, prefix="/v1")
+app.include_router(markets_router, prefix="/v1")
+app.include_router(reports_router, prefix="/v1")
 app.include_router(identity_webhooks_router, prefix="/webhooks")
 
 
