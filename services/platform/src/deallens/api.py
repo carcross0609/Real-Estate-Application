@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from deallens.core.config import get_settings
 from deallens.core.errors import register_error_handlers
 from deallens.core.logging import configure_logging
+from deallens.modules.alerts.router import router as alerts_router
 from deallens.modules.engine.router import router as engine_router
 from deallens.modules.identity.router import router as identity_router
 from deallens.modules.identity.webhooks import router as identity_webhooks_router
@@ -39,6 +40,7 @@ app.include_router(vision_router, prefix="/v1")
 app.include_router(scoring_router, prefix="/v1")
 app.include_router(markets_router, prefix="/v1")
 app.include_router(reports_router, prefix="/v1")
+app.include_router(alerts_router, prefix="/v1")
 app.include_router(identity_webhooks_router, prefix="/webhooks")
 
 

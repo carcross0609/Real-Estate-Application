@@ -58,3 +58,15 @@ ignore = ["B008"]
 python_version = "3.12"
 strict = true
 plugins = []
+
+# Celery ships no type information, so its symbols resolve to Any. That's contained to the
+# worker layer (the modules stay fully typed): allow the missing stubs, and in the task modules
+# — where every entrypoint is wrapped by Celery's untyped `@task` decorator — relax only the
+# untyped-decorator check. Everything else in those files is still strict-typed.
+[[tool.mypy.overrides]]
+module = ["celery.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["deallens.worker.app", "deallens.worker.emitter", "deallens.worker.tasks.*"]
+disallow_untyped_decorators = false

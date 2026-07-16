@@ -22,6 +22,20 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379/0"
 
+    # Background automation (§9.4/§9.5). Celery uses Redis as both broker and result backend
+    # by default — the same instance as `redis_url` (the per-property analysis lock lives
+    # there too). Split out so a production deploy can point the queue at a dedicated Redis
+    # without moving the cache/lock. `celery_eager` runs tasks inline (no worker/broker) — the
+    # substrate for a synchronous single-process run and for task tests.
+    celery_broker_url: str | None = None
+    celery_result_backend: str | None = None
+    celery_eager: bool = False
+
+    # Instant buy-box alerts are gated on analysis confidence (03 §25.1 #4): a low-confidence
+    # score never fires an interrupt-the-user alert — it waits for the digest. Boxes and the
+    # matcher read this floor (0–1 scale) rather than hardcoding it.
+    alerts_confidence_gate: float = 0.5
+
     s3_endpoint_url: str | None = None
     s3_access_key_id: str | None = None
     s3_secret_access_key: str | None = None
@@ -40,6 +54,15 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def broker_url(self) -> str:
+        """Celery broker — the dedicated `celery_broker_url` if set, else the shared Redis."""
+        return self.celery_broker_url or self.redis_url
+
+    @property
+    def result_backend(self) -> str:
+        return self.celery_result_backend or self.redis_url
 
 
 @lru_cache

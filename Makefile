@@ -1,4 +1,4 @@
-.PHONY: dev dev-down dev-logs venv-unhide api-install api-test api-lint api-migrate api-run web-install web-dev web-build seed
+.PHONY: dev dev-down dev-logs venv-unhide api-install api-test api-lint api-migrate api-run api-worker api-beat web-install web-dev web-build seed
 
 COMPOSE = docker compose -f infra/docker/docker-compose.dev.yml
 
@@ -37,6 +37,14 @@ api-migrate: venv-unhide
 
 api-run: venv-unhide
 	cd services/platform && .venv/bin/uvicorn deallens.api:app --reload --port 8000
+
+# Background automation (§9.4/§9.5). Needs Redis (make dev). `api-worker` processes tasks;
+# `api-beat` emits the recurring schedule (ingestion polls, refresh sweep, digests, drift audit).
+api-worker: venv-unhide
+	cd services/platform && .venv/bin/celery -A deallens.worker.app:celery_app worker -l info
+
+api-beat: venv-unhide
+	cd services/platform && .venv/bin/celery -A deallens.worker.app:celery_app beat -l info
 
 ## --- Frontend (apps/web) ---
 web-install:
